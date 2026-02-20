@@ -16,7 +16,7 @@ async function registerWebhook(url, events) {
   const result = await pool.query(
     `INSERT INTO webhooks (url, events)
      VALUES ($1, $2)
-     ON CONFLICT DO NOTHING
+     ON CONFLICT (url) DO UPDATE SET events = EXCLUDED.events
      RETURNING *`,
     [url, events]
   );

@@ -26,15 +26,24 @@ router.post('/login', async (req, res, next) => {
       [username]
     );
 
-    // Fallback: usuario admin desde variables de entorno (solo desarrollo)
+    // Fallback: usuario admin desde variables de entorno (solo en desarrollo)
     let user = result.rows[0];
     if (!user) {
-      const envUser = process.env.ADMIN_USERNAME || 'admin';
-      const envPass = process.env.ADMIN_PASSWORD || 'admin123';
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(401).json({ error: 'Credenciales inválidas' });
+      }
 
-      if (username === envUser && password === envPass) {
-        user = { id: 'env-admin', username: envUser, role: 'admin' };
-      } else {
+      const envUser = process.env.ADMIN_USERNAME;
+      const envPass = process.env.ADMIN_PASSWORD;
+
+      if (envUser && envPass && username === envUser) {
+        const validEnv = await bcrypt.compare(password, await bcrypt.hash(envPass, 12));
+        if (validEnv) {
+          user = { id: 'env-admin', username: envUser, role: 'admin' };
+        }
+      }
+
+      if (!user) {
         return res.status(401).json({ error: 'Credenciales inválidas' });
       }
     } else {

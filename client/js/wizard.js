@@ -160,12 +160,17 @@
 
     try {
       if (!navigator.onLine) {
-        // Encolar para cuando haya conectividad
-        await enqueueSync('upload', { filename: selectedFile.name });
-        showResult({
-          message: 'Sin conexión. La subida se procesará automáticamente cuando haya internet.',
-          stats:   { inserted: 0, updated: 0, errors: [] },
-        }, false);
+        // Encolar como base64 para poder serializar en IndexedDB
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const base64 = btoa(e.target.result);
+          await enqueueSync('upload', { fileBase64: base64, fileName: selectedFile.name });
+          showResult({
+            message: 'Sin conexión. La subida se procesará automáticamente cuando haya internet.',
+            stats:   { inserted: 0, updated: 0, errors: [] },
+          }, false);
+        };
+        reader.readAsBinaryString(selectedFile);
         return;
       }
 

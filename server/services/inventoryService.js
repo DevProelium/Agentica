@@ -95,6 +95,15 @@ function processCSV(fileData) {
               safeDecimal(row[COL.PRICE]),
             ];
 
+            // Si no hay SKU, usar handle como identificador alternativo
+            if (!sku) {
+              const handle = (row[COL.HANDLE] || '').trim() || null;
+              if (!handle) {
+                stats.errors.push(`Fila sin SKU ni handle omitida (título: ${title})`);
+                continue;
+              }
+            }
+
             const query = `
               INSERT INTO products
                 (handle, title, sku, description, location,
@@ -102,7 +111,7 @@ function processCSV(fileData) {
                  option3_name, option3_value,
                  incoming, unavailable, committed, available, on_hand, price)
               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-              ON CONFLICT (sku) DO UPDATE SET
+              ON CONFLICT (sku) WHERE sku IS NOT NULL DO UPDATE SET
                 handle       = EXCLUDED.handle,
                 title        = EXCLUDED.title,
                 description  = EXCLUDED.description,

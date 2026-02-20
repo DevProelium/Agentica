@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS products (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     handle          TEXT,
     title           TEXT NOT NULL,
-    sku             TEXT UNIQUE,
+    sku             TEXT,
     description     TEXT,
     location        TEXT,
     -- Opciones de variante (ej: talla, color, material)
@@ -36,7 +36,8 @@ CREATE INDEX IF NOT EXISTS products_embedding_idx
 
 -- Índices para búsqueda y filtrado rápido
 CREATE INDEX IF NOT EXISTS products_handle_idx ON products(handle);
-CREATE INDEX IF NOT EXISTS products_sku_idx ON products(sku);
+-- Índice parcial único en SKU (solo cuando no es NULL) para soportar upsert con registros sin SKU
+CREATE UNIQUE INDEX IF NOT EXISTS products_sku_unique_idx ON products(sku) WHERE sku IS NOT NULL;
 
 -- Tabla de usuarios para autenticación
 CREATE TABLE IF NOT EXISTS users (
@@ -50,7 +51,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Tabla de webhooks registrados
 CREATE TABLE IF NOT EXISTS webhooks (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    url        TEXT NOT NULL,
+    url        TEXT UNIQUE NOT NULL,
     events     TEXT[] NOT NULL,
     active     BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()

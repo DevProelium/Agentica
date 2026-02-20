@@ -72,12 +72,19 @@ async function processSyncQueue() {
 
   for (const item of pending) {
     try {
-      if (item.type === 'upload' && item.payload.formData) {
-        // Re-intentar subida de CSV encolada
+      if (item.type === 'upload' && item.payload.fileBase64) {
+        // Reconstruir el archivo desde base64 y re-intentar la subida
+        const binary = atob(item.payload.fileBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'text/csv' });
+        const formData = new FormData();
+        formData.append('file', blob, item.payload.fileName || 'inventory.csv');
+
         await fetch(`${getApiBase()}/api/inventory/upload`, {
           method:  'POST',
           headers: authHeaders(),
-          body:    item.payload.formData,
+          body:    formData,
         });
         console.log('[Sync] Subida CSV pendiente completada');
       }
