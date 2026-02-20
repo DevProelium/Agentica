@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f1117" />
+  <meta name="description" content="Agentica Inventory — Gestión inteligente de inventarios" />
+  <title>Agentica Inventory</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Íconos -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="css/styles.css" />
+
+  <!-- Dexie.js para IndexedDB offline -->
+  <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Encabezado ──────────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-brand">
+      <span class="brand-icon">⬡</span>
+      <span class="brand-name">AGENTICA</span>
+      <span class="brand-sub">INVENTORY</span>
+    </div>
+    <nav class="header-nav">
+      <button class="nav-btn active" data-view="dashboard">Dashboard</button>
+      <button class="nav-btn" data-view="upload">Importar CSV</button>
+      <button class="nav-btn" data-view="chat">Asistente IA</button>
+    </nav>
+    <div class="header-actions">
+      <span id="sync-status" class="sync-indicator" title="Estado de sincronización">●</span>
+      <button id="logout-btn" class="btn-icon" title="Cerrar sesión">⏏</button>
+    </div>
+  </header>
+
+  <!-- ── Login Modal ─────────────────────────────────────────────────────── -->
+  <div id="login-modal" class="modal-overlay active">
+    <div class="modal-card">
+      <h2 class="modal-title">⬡ AGENTICA</h2>
+      <p class="modal-subtitle">Sistema de Inventario Industrial</p>
+      <form id="login-form" autocomplete="off">
+        <div class="form-group">
+          <label for="login-username">Usuario</label>
+          <input id="login-username" type="text" class="form-input" placeholder="admin" required />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <input id="login-password" type="password" class="form-input" placeholder="••••••••" required />
+        </div>
+        <p id="login-error" class="form-error hidden"></p>
+        <button type="submit" class="btn-primary btn-full">Iniciar Sesión</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Contenido Principal ─────────────────────────────────────────────── -->
+  <main id="app" class="app-container hidden">
+
+    <!-- Vista: Dashboard de inventario -->
+    <section id="view-dashboard" class="view active">
+      <div class="view-header">
+        <h1>Inventario</h1>
+        <div class="view-actions">
+          <input id="search-input" type="search" class="form-input search-input"
+                 placeholder="Búsqueda semántica…" />
+          <button id="search-btn" class="btn-primary">Buscar</button>
+        </div>
+      </div>
+
+      <!-- Tarjetas de métricas -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span class="metric-value" id="metric-total">—</span>
+          <span class="metric-label">Total productos</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value" id="metric-available">—</span>
+          <span class="metric-label">Disponibles</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value" id="metric-committed">—</span>
+          <span class="metric-label">Comprometidos</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value" id="metric-on-hand">—</span>
+          <span class="metric-label">En mano</span>
+        </div>
+      </div>
+
+      <!-- Tabla de productos -->
+      <div class="table-wrapper">
+        <table class="products-table" id="products-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Título</th>
+              <th>Ubicación</th>
+              <th>Disponible</th>
+              <th>En mano</th>
+              <th>Precio</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="products-tbody">
+            <tr><td colspan="7" class="table-empty">Cargando productos…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Paginación -->
+      <div class="pagination" id="pagination">
+        <button id="prev-page" class="btn-ghost">← Anterior</button>
+        <span id="page-info">Página 1</span>
+        <button id="next-page" class="btn-ghost">Siguiente →</button>
+      </div>
+    </section>
+
+    <!-- Vista: Wizard de importación CSV -->
+    <section id="view-upload" class="view">
+      <div class="view-header">
+        <h1>Importar CSV</h1>
+      </div>
+
+      <!-- Indicador de pasos del wizard -->
+      <div class="wizard-steps">
+        <div class="step active" data-step="1">
+          <span class="step-number">1</span>
+          <span class="step-label">Seleccionar</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="2">
+          <span class="step-number">2</span>
+          <span class="step-label">Previsualizar</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step" data-step="3">
+          <span class="step-number">3</span>
+          <span class="step-label">Confirmar</span>
+        </div>
+      </div>
+
+      <!-- Paso 1: Selección de archivo -->
+      <div class="wizard-panel" id="wizard-step-1">
+        <div class="dropzone" id="dropzone">
+          <span class="dropzone-icon">📂</span>
+          <p>Arrastra tu CSV aquí o <label for="csv-file" class="link-btn">elige un archivo</label></p>
+          <input type="file" id="csv-file" accept=".csv" class="hidden" />
+          <p class="dropzone-hint">Formato compatible: exportación de inventario Shopify</p>
+        </div>
+        <button id="wizard-next-1" class="btn-primary btn-full" disabled>Continuar →</button>
+      </div>
+
+      <!-- Paso 2: Vista previa -->
+      <div class="wizard-panel hidden" id="wizard-step-2">
+        <h3>Vista previa (primeras 5 filas)</h3>
+        <div class="table-wrapper" id="preview-table-wrapper"></div>
+        <div class="wizard-actions">
+          <button id="wizard-back-2" class="btn-ghost">← Volver</button>
+          <button id="wizard-next-2" class="btn-primary">Confirmar y subir →</button>
+        </div>
+      </div>
+
+      <!-- Paso 3: Resultado de la importación -->
+      <div class="wizard-panel hidden" id="wizard-step-3">
+        <div id="upload-progress" class="progress-block">
+          <div class="spinner"></div>
+          <p>Procesando CSV…</p>
+        </div>
+        <div id="upload-result" class="result-block hidden"></div>
+        <button id="wizard-restart" class="btn-primary btn-full hidden">Importar otro archivo</button>
+      </div>
+    </section>
+
+    <!-- Vista: Chat con asistente IA -->
+    <section id="view-chat" class="view">
+      <div class="view-header">
+        <h1>Asistente IA</h1>
+      </div>
+      <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-msg assistant">
+            <span class="msg-avatar">⬡</span>
+            <div class="msg-bubble">
+              ¡Hola! Soy tu asistente de inventario. Puedo ayudarte a buscar productos,
+              analizar stock y responder preguntas sobre tu inventario.
+            </div>
+          </div>
+        </div>
+        <form class="chat-input-area" id="chat-form">
+          <input type="text" id="chat-input" class="form-input"
+                 placeholder="Pregunta algo sobre tu inventario…" />
+          <button type="submit" class="btn-primary">Enviar</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Scripts ─────────────────────────────────────────────────────────── -->
+  <script src="js/db.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/wizard.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/chat-ui.js"></script>
+
+  <script>
+    // Registro del Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js')
+        .then(() => console.log('[SW] Registrado'))
+        .catch((err) => console.warn('[SW] Error:', err));
+    }
+
+    // ── Autenticación y navegación ──────────────────────────────────────────
+    const API_BASE = 'http://localhost:3000';
+
+    const loginModal = document.getElementById('login-modal');
+    const loginForm  = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const appEl      = document.getElementById('app');
+    const logoutBtn  = document.getElementById('logout-btn');
+
+    // Verificar si ya hay sesión activa
+    (function checkSession() {
+      const token = localStorage.getItem('agentica_token');
+      if (token) {
+        loginModal.classList.remove('active');
+        loginModal.classList.add('hidden');
+        appEl.classList.remove('hidden');
+        syncProducts && syncProducts();
+      }
+    })();
+
+    // Manejar formulario de login
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+      loginError.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/login`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ username, password }),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || 'Error de autenticación');
+
+        localStorage.setItem('agentica_token', body.token);
+        loginModal.classList.add('hidden');
+        loginModal.classList.remove('active');
+        appEl.classList.remove('hidden');
+        syncProducts && syncProducts();
+      } catch (err) {
+        loginError.textContent = err.message;
+        loginError.classList.remove('hidden');
+      }
+    });
+
+    // Cerrar sesión
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem('agentica_token');
+      appEl.classList.add('hidden');
+      loginModal.classList.remove('hidden');
+      loginModal.classList.add('active');
+    });
+
+    // Navegación entre vistas
+    document.querySelectorAll('.nav-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const viewId = btn.dataset.view;
+        document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
+        const target = document.getElementById(`view-${viewId}`);
+        if (target) target.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
