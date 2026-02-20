@@ -1,0 +1,285 @@
+openapi: "3.0.3"
+info:
+  title: Agentica Inventory API
+  version: "1.0.0"
+  description: |
+    API REST para gestión inteligente de inventarios con búsqueda semántica y asistente IA.
+
+servers:
+  - url: http://localhost:3000
+    description: Servidor de desarrollo local
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:            { type: string, format: uuid }
+        handle:        { type: string }
+        title:         { type: string }
+        sku:           { type: string }
+        description:   { type: string }
+        location:      { type: string }
+        option1_name:  { type: string }
+        option1_value: { type: string }
+        option2_name:  { type: string }
+        option2_value: { type: string }
+        option3_name:  { type: string }
+        option3_value: { type: string }
+        incoming:      { type: integer }
+        unavailable:   { type: integer }
+        committed:     { type: integer }
+        available:     { type: integer }
+        on_hand:       { type: integer }
+        price:         { type: number, format: double }
+        created_at:    { type: string, format: date-time }
+        updated_at:    { type: string, format: date-time }
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user:
+          type: object
+          properties:
+            id:       { type: string }
+            username: { type: string }
+            role:     { type: string }
+
+    ChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:    { type: string, enum: [user, assistant, system] }
+              content: { type: string }
+        productContext: { type: string }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check del servidor
+      security: []
+      responses:
+        "200":
+          description: Servidor operativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:    { type: string }
+                  timestamp: { type: string }
+
+  /api/auth/login:
+    post:
+      summary: Iniciar sesión y obtener JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Token JWT generado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401":
+          description: Credenciales inválidas
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/auth/register:
+    post:
+      summary: Registrar nuevo usuario
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "201":
+          description: Usuario creado
+        "409":
+          description: Usuario ya existe
+
+  /api/inventory:
+    get:
+      summary: Listar productos (con búsqueda semántica opcional)
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Texto para búsqueda semántica vectorial
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                  total: { type: integer }
+
+  /api/inventory/upload:
+    post:
+      summary: Subir y procesar archivo CSV de inventario (formato Shopify)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: CSV procesado con estadísticas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:  { type: string }
+                  filename: { type: string }
+                  stats:
+                    type: object
+                    properties:
+                      inserted: { type: integer }
+                      updated:  { type: integer }
+                      errors:
+                        type: array
+                        items: { type: string }
+
+  /api/inventory/{id}:
+    get:
+      summary: Obtener producto por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Producto encontrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404":
+          description: Producto no encontrado
+
+    put:
+      summary: Actualizar producto parcialmente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Product" }
+      responses:
+        "200":
+          description: Producto actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+
+    delete:
+      summary: Eliminar producto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Producto eliminado
+        "404":
+          description: Producto no encontrado
+
+  /api/chat/chat:
+    post:
+      summary: Enviar mensaje al asistente IA de inventario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatRequest" }
+      responses:
+        "200":
+          description: Respuesta del asistente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply: { type: string }
+
+  /api/chat/search:
+    get:
+      summary: Búsqueda semántica de productos
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Productos más similares semánticamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                  total: { type: integer }
