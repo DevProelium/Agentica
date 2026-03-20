@@ -16,7 +16,7 @@ const POS = (function() {
         selectedProduct: null,  // Producto seleccionado en búsqueda
         paymentMethod: 'cash',
         cashReceived: 0,
-        mixedPayment: { cash: 0, card: 0 },
+        mixedPayment: { cash: 0, card: 0, transfer: 0 },
         discount: { type: null, value: 0 }, // 'percent' o 'amount'
         cashSession: null,      // Sesión de caja activa
         offlineMode: false,
@@ -75,6 +75,7 @@ const POS = (function() {
         dom.mixedPaymentWrapper = document.getElementById('mixed-payment-wrapper');
         dom.mixedCashInput = document.getElementById('mixed-cash-amount');
         dom.mixedCardInput = document.getElementById('mixed-card-amount');
+        dom.mixedTransferInput = document.getElementById('mixed-transfer-amount');
 
         // Acciones
         dom.checkoutBtn = document.getElementById('checkout-btn');
@@ -144,6 +145,10 @@ const POS = (function() {
             state.mixedPayment.card = parseFloat(e.target.value) || 0;
             updateMixedChange();
         });
+        dom.mixedTransferInput.addEventListener('input', (e) => {
+            state.mixedPayment.transfer = parseFloat(e.target.value) || 0;
+            updateMixedChange();
+        });
 
         // Sesión de caja
         dom.openSessionBtn.addEventListener('click', openCashSession);
@@ -161,6 +166,28 @@ const POS = (function() {
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal-overlay')) {
                 hideModal(e.target);
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F1') {
+                e.preventDefault();
+                dom.productSearch.focus();
+            } else if (e.key === 'F2') {
+                e.preventDefault();
+                holdSale();
+            } else if (e.key === 'F3') {
+                e.preventDefault();
+                checkout();
+            } else if (e.key === 'F4') {
+                e.preventDefault();
+                cancelSale();
+            } else if (e.key === 'F5') {
+                e.preventDefault();
+                openCashSession();
+            } else if (e.key === 'F6') {
+                e.preventDefault();
+                closeCashSession();
             }
         });
     }
@@ -517,7 +544,7 @@ const POS = (function() {
             dom.mixedPaymentWrapper.classList.add('hidden');
             updateChange();
         } else if (method === 'mixed') {
-            dom.cashReceived.parentElement.classList.remove('hidden');
+            dom.cashReceived.parentElement.classList.add('hidden');
             dom.mixedPaymentWrapper.classList.remove('hidden');
             dom.changeDisplay.classList.remove('hidden');
             updateMixedChange();
@@ -547,7 +574,7 @@ const POS = (function() {
 
     function updateMixedChange() {
         const total = parseFloat(dom.cartTotal.textContent.replace('$', '')) || 0;
-        const provided = (parseFloat(dom.mixedCashInput.value) || 0) + (parseFloat(dom.mixedCardInput.value) || 0);
+        const provided = (parseFloat(dom.mixedCashInput.value) || 0) + (parseFloat(dom.mixedCardInput.value) || 0) + (parseFloat(dom.mixedTransferInput.value) || 0);
         const change = provided - total;
         if (change >= 0) {
             dom.changeAmount.textContent = `$${change.toFixed(2)}`;
@@ -683,9 +710,9 @@ const POS = (function() {
 
         // Manejo de pago mixto
         if (state.paymentMethod === 'mixed') {
-            const providedTotal = (state.mixedPayment.cash || 0) + (state.mixedPayment.card || 0);
+            const providedTotal = (state.mixedPayment.cash || 0) + (state.mixedPayment.card || 0) + (state.mixedPayment.transfer || 0);
             if (Math.abs(providedTotal - total) > 0.01) {
-                alert('La suma de efectivo + tarjeta debe ser igual al total de la venta.');
+                alert('La suma de efectivo + tarjeta + transferencia debe ser igual al total de la venta.');
                 return;
             }
         }
