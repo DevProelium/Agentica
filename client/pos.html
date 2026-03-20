@@ -106,6 +106,14 @@
               <span>IVA (16%):</span>
               <span id="cart-tax">$0.00</span>
             </div>
+            <div class="total-row">
+              <span>Utilidad bruta:</span>
+              <span id="cart-profit">$0.00</span>
+            </div>
+            <div class="total-row">
+              <span>Margen:</span>
+              <span id="cart-margin">0.0%</span>
+            </div>
             <div class="total-row total-row-grand">
               <span>TOTAL:</span>
               <span id="cart-total">$0.00</span>
@@ -160,6 +168,12 @@
             <label for="cash-received">Efectivo recibido:</label>
             <input type="number" id="cash-received" class="form-input" step="0.01" value="0.00" />
           </div>
+          <div id="mixed-payment-wrapper" class="payment-input hidden">
+            <label for="mixed-cash-amount">Efectivo (mixto):</label>
+            <input type="number" id="mixed-cash-amount" class="form-input" step="0.01" value="0.00" />
+            <label for="mixed-card-amount">Tarjeta/Transferencia (mixto):</label>
+            <input type="number" id="mixed-card-amount" class="form-input" step="0.01" value="0.00" />
+          </div>
           <div id="change-display" class="change-display hidden">
             <span>Cambio:</span>
             <span id="change-amount">$0.00</span>
@@ -179,6 +193,10 @@
           <button id="hold-sale-btn" class="btn-secondary">
             <span class="btn-icon">⏸</span>
             Pausar venta
+          </button>
+          <button id="view-held-btn" class="btn-secondary" title="Ver ventas en espera">
+            <span class="btn-icon">📌</span>
+            Ventas en espera
           </button>
           <button id="sync-offline-btn" class="btn-secondary" title="Sincronizar ventas offline">
             <span class="btn-icon">↻</span>

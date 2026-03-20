@@ -16,10 +16,12 @@ const POS = (function() {
         selectedProduct: null,  // Producto seleccionado en búsqueda
         paymentMethod: 'cash',
         cashReceived: 0,
+        mixedPayment: { cash: 0, card: 0 },
         discount: { type: null, value: 0 }, // 'percent' o 'amount'
         cashSession: null,      // Sesión de caja activa
         offlineMode: false,
         pendingOfflineSales: [],
+        heldSales: [],
         user: null
     };
 
@@ -36,6 +38,7 @@ const POS = (function() {
         checkConnection();
         checkActiveCashSession();
         loadPendingOfflineSales();
+        loadHeldSales();
         updateCartDisplay();
         // Precargar productos locales
         setTimeout(() => searchProducts(''), 500);
@@ -69,6 +72,9 @@ const POS = (function() {
         dom.cashReceived = document.getElementById('cash-received');
         dom.changeDisplay = document.getElementById('change-display');
         dom.changeAmount = document.getElementById('change-amount');
+        dom.mixedPaymentWrapper = document.getElementById('mixed-payment-wrapper');
+        dom.mixedCashInput = document.getElementById('mixed-cash-amount');
+        dom.mixedCardInput = document.getElementById('mixed-card-amount');
 
         // Acciones
         dom.checkoutBtn = document.getElementById('checkout-btn');
@@ -126,7 +132,18 @@ const POS = (function() {
         dom.checkoutBtn.addEventListener('click', checkout);
         dom.cancelSaleBtn.addEventListener('click', cancelSale);
         dom.holdSaleBtn.addEventListener('click', holdSale);
+        const heldBtn = document.getElementById('view-held-btn');
+        if (heldBtn) heldBtn.addEventListener('click', showHeldSales);
         dom.syncOfflineBtn.addEventListener('click', syncOfflineSales);
+
+        dom.mixedCashInput.addEventListener('input', (e) => {
+            state.mixedPayment.cash = parseFloat(e.target.value) || 0;
+            updateMixedChange();
+        });
+        dom.mixedCardInput.addEventListener('input', (e) => {
+            state.mixedPayment.card = parseFloat(e.target.value) || 0;
+            updateMixedChange();
+        });
 
         // Sesión de caja
         dom.openSessionBtn.addEventListener('click', openCashSession);
@@ -280,7 +297,7 @@ const POS = (function() {
                 <div>
                     <div class="result-sku">${p.sku || 'Sin SKU'}</div>
                     <div class="result-title">${p.title}</div>
-                    <div class="result-stock">Disponible: ${p.available} | ${p.location || 'Sin ubicación'}</div>
+                    <div class="result-stock ${p.available <= 5 ? 'low-stock' : ''}">Disponible: ${p.available} | ${p.location || 'Sin ubicación'}</div>
                 </div>
                 <div class="result-price">$${p.price.toFixed(2)}</div>
             `;
@@ -309,6 +326,7 @@ const POS = (function() {
                     title: product.title,
                     sku: product.sku,
                     available: product.available,
+                    cost: product.cost || 0,
                     price_retail: product.price_retail || product.price,
                     price_mid: product.price_mid || product.price,
                     price_wholesale: product.price_wholesale || product.price
@@ -437,9 +455,13 @@ const POS = (function() {
     function calculateTotals() {
         let subtotal = 0;
         let totalDiscount = 0;
+        let totalCost = 0;
         state.cart.forEach(item => {
             subtotal += item.quantity * item.unit_price;
             totalDiscount += item.discount;
+            // Usar costo si existe; de lo contrario usar el precio venta interno
+            const costPerUnit = item.product.cost || item.product.price_retail || item.unit_price;
+            totalCost += item.quantity * costPerUnit;
         });
         // Aplicar descuento global si existe
         if (state.discount.type === 'percent') {
@@ -450,11 +472,26 @@ const POS = (function() {
         const tax = (subtotal - totalDiscount) * TAX_RATE;
         const total = subtotal - totalDiscount + tax;
 
+        const profit = subtotal - totalDiscount - totalCost;
+        const profitPercent = totalCost > 0 ? (profit / totalCost) * 100 : 0;
+
         // Actualizar DOM
         dom.cartSubtotal.textContent = `$${subtotal.toFixed(2)}`;
         dom.cartDiscount.textContent = `$${totalDiscount.toFixed(2)}`;
         dom.cartTax.textContent = `$${tax.toFixed(2)}`;
         dom.cartTotal.textContent = `$${total.toFixed(2)}`;
+
+        const profitSpan = document.getElementById('cart-profit');
+        const marginSpan = document.getElementById('cart-margin');
+        if (profitSpan) profitSpan.textContent = `$${profit.toFixed(2)}`;
+        if (marginSpan) marginSpan.textContent = `${profitPercent.toFixed(1)}%`;
+
+        // Sincronizar cambio para método mixto
+        if (state.paymentMethod === 'mixed') {
+            updateMixedChange();
+        } else {
+            updateChange();
+        }
     }
 
     /**
@@ -477,9 +514,16 @@ const POS = (function() {
         // Mostrar/ocultar campo de efectivo recibido
         if (method === 'cash') {
             dom.cashReceived.parentElement.classList.remove('hidden');
+            dom.mixedPaymentWrapper.classList.add('hidden');
             updateChange();
+        } else if (method === 'mixed') {
+            dom.cashReceived.parentElement.classList.remove('hidden');
+            dom.mixedPaymentWrapper.classList.remove('hidden');
+            dom.changeDisplay.classList.remove('hidden');
+            updateMixedChange();
         } else {
             dom.cashReceived.parentElement.classList.add('hidden');
+            dom.mixedPaymentWrapper.classList.add('hidden');
             dom.changeDisplay.classList.add('hidden');
         }
     }
@@ -488,6 +532,7 @@ const POS = (function() {
      * Calcula y muestra el cambio.
      */
     function updateChange() {
+        if (state.paymentMethod !== 'cash') return;
         const received = parseFloat(dom.cashReceived.value) || 0;
         state.cashReceived = received;
         const total = parseFloat(dom.cartTotal.textContent.replace('$', '')) || 0;
@@ -496,6 +541,19 @@ const POS = (function() {
             dom.changeAmount.textContent = `$${change.toFixed(2)}`;
             dom.changeDisplay.classList.remove('hidden');
         } else {
+            dom.changeDisplay.classList.add('hidden');
+        }
+    }
+
+    function updateMixedChange() {
+        const total = parseFloat(dom.cartTotal.textContent.replace('$', '')) || 0;
+        const provided = (parseFloat(dom.mixedCashInput.value) || 0) + (parseFloat(dom.mixedCardInput.value) || 0);
+        const change = provided - total;
+        if (change >= 0) {
+            dom.changeAmount.textContent = `$${change.toFixed(2)}`;
+            dom.changeDisplay.classList.remove('hidden');
+        } else {
+            dom.changeAmount.textContent = `$0.00`;
             dom.changeDisplay.classList.add('hidden');
         }
     }
@@ -621,11 +679,26 @@ const POS = (function() {
             discount: item.discount,
             tax_rate: item.tax_rate
         }));
+        const total = parseFloat(dom.cartTotal.textContent.replace('$', '')) || 0;
+
+        // Manejo de pago mixto
+        if (state.paymentMethod === 'mixed') {
+            const providedTotal = (state.mixedPayment.cash || 0) + (state.mixedPayment.card || 0);
+            if (Math.abs(providedTotal - total) > 0.01) {
+                alert('La suma de efectivo + tarjeta debe ser igual al total de la venta.');
+                return;
+            }
+        }
+
         const saleData = {
             items,
             payment_method: state.paymentMethod,
             cash_session_id: state.cashSession.id,
-            notes: ''
+            notes: '',
+            payment_breakdown: state.paymentMethod === 'mixed' ? {
+                cash: state.mixedPayment.cash || 0,
+                card: state.mixedPayment.card || 0
+            } : undefined
         };
         try {
             let result;
@@ -673,10 +746,91 @@ const POS = (function() {
     }
 
     /**
+     * Guarda las ventas en espera (holded sales) en localStorage.
+     */
+    function saveHeldSales() {
+        localStorage.setItem('pos_held_sales', JSON.stringify(state.heldSales));
+    }
+
+    /**
+     * Carga las ventas en espera desde localStorage.
+     */
+    function loadHeldSales() {
+        const saved = localStorage.getItem('pos_held_sales');
+        if (saved) {
+            try {
+                state.heldSales = JSON.parse(saved);
+            } catch (err) {
+                console.error('Error decodificando held sales:', err);
+                state.heldSales = [];
+            }
+        } else {
+            state.heldSales = [];
+        }
+    }
+
+    /**
      * Pausa la venta actual (guardar para recuperar después).
      */
     function holdSale() {
-        alert('Funcionalidad en desarrollo');
+        if (state.cart.length === 0) {
+            alert('No hay items en el carrito para pausar.');
+            return;
+        }
+        const name = prompt('Nombre cliente/identificador para la venta en espera:');
+        if (!name) {
+            alert('Debe ingresar un nombre para guardar la venta en espera.');
+            return;
+        }
+        const total = parseFloat(dom.cartTotal.textContent.replace('$', '')) || 0;
+        const hold = {
+            id: generateLocalId(),
+            name,
+            items: state.cart.slice(),
+            total,
+            createdAt: new Date().toISOString()
+        };
+        state.heldSales.push(hold);
+        saveHeldSales();
+        state.cart = [];
+        state.discount = { type: null, value: 0 };
+        updateCartDisplay();
+        alert(`Venta en espera guardada: ${name} (Total: $${total.toFixed(2)})`);
+    }
+
+    /**
+     * Muestra y reanuda una venta en espera.
+     */
+    function showHeldSales() {
+        loadHeldSales();
+        if (!state.heldSales.length) {
+            alert('No hay ventas en espera.');
+            return;
+        }
+
+        let menu = 'Ventas en espera:\n';
+        state.heldSales.forEach((h, idx) => {
+            menu += `${idx + 1}. ${h.name} - $${h.total.toFixed(2)} (${h.items.length} items)\n`;
+        });
+        menu += '0. Cancelar';
+
+        const opt = parseInt(prompt(menu), 10);
+        if (isNaN(opt) || opt < 0 || opt > state.heldSales.length) return;
+        if (opt === 0) return;
+
+        const chosen = state.heldSales[opt - 1];
+        if (!chosen) return;
+
+        if (state.cart.length > 0 && !confirm('Actualmente hay una venta en proceso, al reanudar la venta en espera se perderá la venta actual. ¿Continuar?')) {
+            return;
+        }
+
+        state.cart = chosen.items || [];
+        state.discount = { type: null, value: 0 };
+        state.heldSales = state.heldSales.filter(h => h.id !== chosen.id);
+        saveHeldSales();
+        updateCartDisplay();
+        alert(`Venta en espera reanudada: ${chosen.name}`);
     }
 
     /**

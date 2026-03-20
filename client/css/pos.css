@@ -424,6 +424,11 @@ body.pos-modern-blue .btn-icon:hover {
   color: var(--text-secondary);
 }
 
+.result-stock.low-stock {
+  color: #ef4444;
+  font-weight: 700;
+}
+
 .result-price {
   font-weight: 600;
   color: var(--accent-primary);
