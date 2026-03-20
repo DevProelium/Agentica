@@ -1,6 +1,7 @@
 /**
  * db.js — Capa de persistencia local con Dexie.js (IndexedDB)
  * Almacena productos en caché para funcionamiento offline.
+ * Versión 2: Agrega tabla offlineSales para ventas offline.
  */
 
 /* global Dexie */
@@ -13,6 +14,20 @@ localDB.version(1).stores({
   products: 'id, sku, handle, title',
   // Cola de operaciones pendientes de sincronizar
   syncQueue: '++id, type, createdAt',
+});
+
+// Versión 2: Agrega tabla offlineSales
+localDB.version(2).stores({
+  products: 'id, sku, handle, title',
+  syncQueue: '++id, type, createdAt',
+  offlineSales: '++id, localId, synced, createdAt'
+});
+
+// Versión 21: Forzamos actualización para resolver conflictos de versión (usuario reportó v20 existente)
+localDB.version(21).stores({
+  products: 'id, sku, handle, title',
+  syncQueue: '++id, type, createdAt',
+  offlineSales: '++id, localId, synced, createdAt'
 });
 
 /**
@@ -69,4 +84,44 @@ async function drainSyncQueue() {
   const items = await localDB.syncQueue.toArray();
   await localDB.syncQueue.clear();
   return items;
+}
+
+/**
+ * Guarda una venta offline en IndexedDB.
+ * @param {string} localId - ID único generado en el frontend
+ * @param {object} saleData - Datos completos de la venta
+ * @returns {Promise<number>} ID de la venta en IndexedDB
+ */
+async function saveOfflineSale(localId, saleData) {
+  return await localDB.offlineSales.add({
+    localId,
+    saleData,
+    synced: 0,
+    createdAt: new Date().toISOString()
+  });
+}
+
+/**
+ * Obtiene las ventas offline pendientes de sincronizar.
+ * @returns {Promise<object[]>}
+ */
+async function getPendingOfflineSales() {
+  return await localDB.offlineSales
+    .filter(sale => sale.synced === 0 || sale.synced === false)
+    .toArray();
+}
+
+/**
+ * Marca una venta offline como sincronizada.
+ * @param {number} id - ID de la venta en IndexedDB
+ */
+async function markOfflineSaleSynced(id) {
+  await localDB.offlineSales.update(id, { synced: 1 });
+}
+
+/**
+ * Elimina las ventas offline ya sincronizadas (limpieza).
+ */
+async function clearSyncedOfflineSales() {
+  await localDB.offlineSales.filter(sale => sale.synced === 1 || sale.synced === true).delete();
 }

@@ -11,7 +11,7 @@ const SYNC_INTERVAL_MS = 60_000; // Sincronización automática cada 60 segundos
  * Devuelve la URL base de la API desde constantes compartidas.
  */
 function getApiBase() {
-  return (typeof API_BASE !== 'undefined' ? API_BASE : '') || 'http://localhost:3000';
+  return (typeof API_BASE !== 'undefined' ? API_BASE : (window.API_BASE || ''));
 }
 
 /**

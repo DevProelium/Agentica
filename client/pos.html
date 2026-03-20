@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f1117" />
+  <meta name="description" content="Agentica POS — Terminal de ventas profesionales" />
+  <title>Agentica POS</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Íconos -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💳</text></svg>" />
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/pos.css" />
+
+  <!-- Dexie.js para IndexedDB offline -->
+  <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.min.js"></script>
+</head>
+<body class="pos-modern-blue">
+
+  <!-- ── Encabezado POS ───────────────────────────────────────────────────── -->
+  <header class="pos-header">
+    <div class="pos-brand">
+      <span class="brand-icon">⬡</span>
+      <span class="brand-name">AGENTICA</span>
+      <span class="brand-sub">POS</span>
+    </div>
+    <div class="pos-session-info">
+      <div class="session-status">
+        <span id="cash-session-status" class="session-indicator" title="Estado de caja">●</span>
+        <span id="cash-session-text">Caja no abierta</span>
+      </div>
+      <div class="session-actions">
+        <button id="open-session-btn" class="btn-small btn-secondary">Abrir caja</button>
+        <button id="close-session-btn" class="btn-small btn-danger" disabled>Cerrar caja</button>
+      </div>
+    </div>
+    <div class="pos-user-info">
+      <span id="current-user">Usuario</span>
+      <button id="pos-logout-btn" class="btn-icon" title="Cerrar sesión">⏏</button>
+    </div>
+  </header>
+
+  <!-- ── Login Modal (igual que en inventory) ────────────────────────────── -->
+  <div id="login-modal" class="modal-overlay active">
+    <div class="modal-card">
+      <h2 class="modal-title">⬡ AGENTICA POS</h2>
+      <p class="modal-subtitle">Terminal de ventas profesionales</p>
+      <form id="login-form" autocomplete="off">
+        <div class="form-group">
+          <label for="login-username">Usuario</label>
+          <input id="login-username" type="text" class="form-input" placeholder="admin" autocomplete="username" required />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <input id="login-password" type="password" class="form-input" placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+        <p id="login-error" class="form-error hidden"></p>
+        <button type="submit" class="btn-primary btn-full">Iniciar Sesión</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Contenido Principal POS ─────────────────────────────────────────── -->
+  <main id="pos-app" class="pos-container hidden">
+    <div class="pos-grid">
+      <!-- Columna izquierda: Búsqueda de productos y carrito -->
+      <div class="pos-column-left">
+        <!-- Búsqueda rápida -->
+        <div class="search-section">
+          <h3 class="section-title">Búsqueda de productos</h3>
+          <div class="search-box">
+            <input type="search" id="product-search" class="form-input search-input-lg"
+                   placeholder="SKU, nombre, descripción…" autocomplete="off" />
+            <button id="search-clear" class="btn-icon">✕</button>
+          </div>
+          <div id="search-results" class="search-results">
+            <!-- Los resultados se insertan aquí -->
+            <div class="empty-results">Escribe para buscar productos</div>
+          </div>
+        </div>
+
+        <!-- Carrito de venta -->
+        <div class="cart-section">
+          <h3 class="section-title">
+            Carrito de venta
+            <span id="cart-item-count" class="badge">0</span>
+          </h3>
+          <div id="cart-items" class="cart-items">
+            <div class="empty-cart">No hay productos en el carrito</div>
+          </div>
+          <div class="cart-totals">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span id="cart-subtotal">$0.00</span>
+            </div>
+            <div class="total-row">
+              <span>Descuento:</span>
+              <span id="cart-discount">$0.00</span>
+            </div>
+            <div class="total-row">
+              <span>IVA (16%):</span>
+              <span id="cart-tax">$0.00</span>
+            </div>
+            <div class="total-row total-row-grand">
+              <span>TOTAL:</span>
+              <span id="cart-total">$0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Columna derecha: Teclado numérico y acciones -->
+      <div class="pos-column-right">
+        <!-- Teclado numérico -->
+        <div class="keypad-section">
+          <h3 class="section-title">Teclado</h3>
+          <div class="keypad-grid">
+            <button class="keypad-btn" data-key="7">7</button>
+            <button class="keypad-btn" data-key="8">8</button>
+            <button class="keypad-btn" data-key="9">9</button>
+            <button class="keypad-btn" data-key="+">+</button>
+            
+            <button class="keypad-btn" data-key="4">4</button>
+            <button class="keypad-btn" data-key="5">5</button>
+            <button class="keypad-btn" data-key="6">6</button>
+            <button class="keypad-btn" data-key="-">–</button>
+            
+            <button class="keypad-btn" data-key="1">1</button>
+            <button class="keypad-btn" data-key="2">2</button>
+            <button class="keypad-btn" data-key="3">3</button>
+            <button class="keypad-btn" data-key="*">×</button>
+            
+            <button class="keypad-btn" data-key="0">0</button>
+            <button class="keypad-btn" data-key=".">.</button>
+            <button class="keypad-btn" data-key="backspace">⌫</button>
+            <button class="keypad-btn" data-key="clear">C</button>
+          </div>
+          <div class="keypad-actions">
+            <button id="apply-discount-btn" class="btn-secondary">Descuento %</button>
+            <button id="set-quantity-btn" class="btn-secondary">Cantidad</button>
+            <button id="set-price-btn" class="btn-secondary">Precio unit.</button>
+          </div>
+        </div>
+
+        <!-- Método de pago -->
+        <div class="payment-section">
+          <h3 class="section-title">Método de pago</h3>
+          <div class="payment-methods">
+            <button class="payment-method active" data-method="cash">Efectivo</button>
+            <button class="payment-method" data-method="card">Tarjeta</button>
+            <button class="payment-method" data-method="transfer">Transferencia</button>
+            <button class="payment-method" data-method="mixed">Mixto</button>
+          </div>
+          <div class="payment-input">
+            <label for="cash-received">Efectivo recibido:</label>
+            <input type="number" id="cash-received" class="form-input" step="0.01" value="0.00" />
+          </div>
+          <div id="change-display" class="change-display hidden">
+            <span>Cambio:</span>
+            <span id="change-amount">$0.00</span>
+          </div>
+        </div>
+
+        <!-- Acciones principales -->
+        <div class="actions-section">
+          <button id="checkout-btn" class="btn-primary btn-large" disabled>
+            <span class="btn-icon">💳</span>
+            COBRAR VENTA
+          </button>
+          <button id="cancel-sale-btn" class="btn-danger btn-large">
+            <span class="btn-icon">✕</span>
+            CANCELAR VENTA
+          </button>
+          <button id="hold-sale-btn" class="btn-secondary">
+            <span class="btn-icon">⏸</span>
+            Pausar venta
+          </button>
+          <button id="sync-offline-btn" class="btn-secondary" title="Sincronizar ventas offline">
+            <span class="btn-icon">↻</span>
+            Sincronizar offline
+          </button>
+        </div>
+
+        <!-- Información adicional -->
+        <div class="info-section">
+          <h3 class="section-title">Información</h3>
+          <div class="info-items">
+            <div class="info-item">
+              <span>Productos en carrito:</span>
+              <span id="info-cart-items">0</span>
+            </div>
+            <div class="info-item">
+              <span>Artículos totales:</span>
+              <span id="info-total-items">0</span>
+            </div>
+            <div class="info-item">
+              <span>Sesión de caja:</span>
+              <span id="info-session-id">—</span>
+            </div>
+            <div class="info-item">
+              <span>Estado conexión:</span>
+              <span id="connection-status" class="online">● En línea</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Modal para descuento ────────────────────────────────────────────── -->
+  <div id="discount-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 class="modal-title">Aplicar descuento</h2>
+      <p>Selecciona tipo de descuento:</p>
+      <div class="discount-options">
+        <button class="discount-option" data-type="percent">Porcentaje (%)</button>
+        <button class="discount-option" data-type="amount">Monto fijo ($)</button>
+      </div>
+      <div class="discount-input hidden">
+        <label id="discount-label">Valor:</label>
+        <input type="number" id="discount-value" class="form-input" step="0.01" />
+        <button id="apply-discount-confirm" class="btn-primary">Aplicar</button>
+      </div>
+      <button id="close-discount-modal" class="btn-secondary">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- ── Scripts ─────────────────────────────────────────────────────────── -->
+  <script src="js/db.js"></script>
+  <script src="js/pos.js"></script>
+
+  <script>
+    // Configuración global
+    const API_BASE = '';
+    const TAX_RATE = 0.16; // IVA 16%
+
+    // Referencias a elementos globales
+    const loginModal = document.getElementById('login-modal');
+    const loginForm  = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const posApp     = document.getElementById('pos-app');
+    const logoutBtn  = document.getElementById('pos-logout-btn');
+
+    // Verificar sesión existente
+    (function checkSession() {
+      const token = localStorage.getItem('agentica_token');
+      if (token) {
+        loginModal.classList.remove('active');
+        loginModal.classList.add('hidden');
+        posApp.classList.remove('hidden');
+        // Inicializar POS
+        if (typeof POS !== 'undefined') POS.init();
+      }
+    })();
+
+    // Manejar login (igual que inventory)
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+      loginError.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/login`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ username, password }),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || 'Error de autenticación');
+
+        localStorage.setItem('agentica_token', body.token);
+        loginModal.classList.add('hidden');
+        loginModal.classList.remove('active');
+        posApp.classList.remove('hidden');
+        if (typeof POS !== 'undefined') POS.init();
+      } catch (err) {
+        loginError.textContent = err.message;
+        loginError.classList.remove('hidden');
+      }
+    });
+
+    // Cerrar sesión
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem('agentica_token');
+      posApp.classList.add('hidden');
+      loginModal.classList.remove('hidden');
+      loginModal.classList.add('active');
+    });
+
+    // Redirigir a inventory si se presiona la marca
+    document.querySelector('.pos-brand').addEventListener('click', () => {
+      window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

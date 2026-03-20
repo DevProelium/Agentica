@@ -6,7 +6,7 @@ info:
     API REST para gestión inteligente de inventarios con búsqueda semántica y asistente IA.
 
 servers:
-  - url: http://localhost:3000
+  - url: http://localhost:3011
     description: Servidor de desarrollo local
 
 components:

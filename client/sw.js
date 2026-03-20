@@ -7,7 +7,7 @@
  *  - Background Sync: reintenta operaciones encoladas offline
  */
 
-const CACHE_NAME     = 'agentica-v1';
+const CACHE_NAME     = 'agentica-v3';
 const API_ORIGIN     = self.location.origin;
 
 // Recursos estáticos a pre-cachear durante la instalación

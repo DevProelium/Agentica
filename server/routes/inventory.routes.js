@@ -14,6 +14,12 @@ router.post(
   controller.uploadCSV
 );
 
+// POST /api/inventory/scan — Petición rápida para actualizar stock (Scan-to-Add)
+router.post('/scan', auth, controller.quickScan);
+
+// POST /api/inventory — Crea un producto manualmente
+router.post('/',    auth, controller.createProduct);
+
 // GET /api/inventory — Lista productos (con búsqueda semántica opcional)
 router.get('/',     auth, controller.listProducts);
 

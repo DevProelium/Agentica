@@ -9,7 +9,7 @@
 (function () {
   'use strict';
 
-  const API_BASE    = 'http://localhost:3000';
+  const API_BASE    = '';
   const PAGE_SIZE   = 20;
 
   let currentPage   = 1;
@@ -74,7 +74,15 @@
           headers: authHeaders(),
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          if (res.status === 401) {
+            // Token expirado o no autorizado, no es un error de red
+            // Dejar que el mecanismo global de expiración maneje esto, o simplemente loguear
+            console.warn('[Dashboard] Sesión expirada o no autorizada (401)');
+            throw new Error(`HTTP ${res.status}`);
+          }
+           throw new Error(`HTTP ${res.status}`);
+        }
 
         const data = await res.json();
         products      = data.products || [];
@@ -83,7 +91,12 @@
         // Actualizar caché local
         if (products.length > 0) await saveProducts(products);
       } catch (err) {
-        console.warn('[Dashboard] Error de red, usando caché:', err.message);
+        if (err.message.includes('401')) {
+           // No mostrar mensaje de error de red, simplemente cargar caché silenciosamente
+           // y esperar a que el usuario se re-loguee
+        } else {
+           console.warn('[Dashboard] Error de red o servidor, usando caché:', err.message);
+        }
         products = await getLocalProducts(currentSearch, PAGE_SIZE);
         totalProducts = products.length;
       }
@@ -209,6 +222,72 @@
       if (btn.dataset.view === 'dashboard') loadProducts();
     });
   });
+
+  // ── Modal de Nuevo Producto ──────────────────────────────────────────
+
+  const addProductBtn = document.getElementById('add-product-btn');
+  const modalProd     = document.getElementById('product-modal');
+  const cancelProdBtn = document.getElementById('cancel-prod-btn');
+  const prodForm      = document.getElementById('product-form');
+
+  if (addProductBtn && modalProd) {
+    addProductBtn.addEventListener('click', () => {
+      modalProd.classList.remove('hidden');
+    });
+
+    const closeModal = () => {
+      modalProd.classList.add('hidden');
+      if (prodForm) prodForm.reset();
+    };
+
+    if (cancelProdBtn) cancelProdBtn.addEventListener('click', closeModal);
+    
+    // Cerrar al hacer click fuera del modal
+    modalProd.addEventListener('click', (e) => {
+      if (e.target === modalProd) closeModal();
+    });
+
+    if (prodForm) {
+      prodForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const title = document.getElementById('prod-title').value;
+        const sku   = document.getElementById('prod-sku').value;
+        const price = document.getElementById('prod-price').value;
+        const stock = document.getElementById('prod-stock').value;
+        const desc  = document.getElementById('prod-desc').value;
+
+        const payload = {
+          title,
+          sku: sku || null,
+          price: parseFloat(price) || 0,
+          on_hand: parseInt(stock) || 0,
+          description: desc || '',
+          location: 'Almacén Central', // Default
+          available: parseInt(stock) || 0,
+        };
+
+        try {
+          const res = await fetch(`${API_BASE}/api/inventory`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || `HTTP ${res.status}`);
+          }
+
+          closeModal();
+          alert('Producto creado correctamente');
+          loadProducts(); // Recargar lista
+        } catch (err) {
+          alert('Error al crear producto: ' + err.message);
+        }
+      });
+    }
+  }
 
   // Carga inicial
   loadProducts();

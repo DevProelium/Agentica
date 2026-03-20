@@ -15,9 +15,13 @@
 
   <!-- Estilos -->
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/pos.css" />
 
   <!-- Dexie.js para IndexedDB offline -->
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.min.js"></script>
+  
+  <!-- SheetJS (xlsx) for processing Excel files in browser -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -32,6 +36,10 @@
       <button class="nav-btn active" data-view="dashboard">Dashboard</button>
       <button class="nav-btn" data-view="upload">Importar CSV</button>
       <button class="nav-btn" data-view="chat">Asistente IA</button>
+      <button class="nav-btn" data-view="scanner">Escáner</button>
+      <button class="nav-btn" data-view="purchases">Compras</button>
+      <button class="nav-btn" data-view="pos">Punto de Venta</button>
+      <button class="nav-btn" data-view="finance">Flujo de Caja</button>
     </nav>
     <div class="header-actions">
       <span id="sync-status" class="sync-indicator" title="Estado de sincronización">●</span>
@@ -47,11 +55,11 @@
       <form id="login-form" autocomplete="off">
         <div class="form-group">
           <label for="login-username">Usuario</label>
-          <input id="login-username" type="text" class="form-input" placeholder="admin" required />
+          <input id="login-username" type="text" class="form-input" placeholder="admin" required autocomplete="username" />
         </div>
         <div class="form-group">
           <label for="login-password">Contraseña</label>
-          <input id="login-password" type="password" class="form-input" placeholder="••••••••" required />
+          <input id="login-password" type="password" class="form-input" placeholder="••••••••" required autocomplete="current-password" />
         </div>
         <p id="login-error" class="form-error hidden"></p>
         <button type="submit" class="btn-primary btn-full">Iniciar Sesión</button>
@@ -67,6 +75,7 @@
       <div class="view-header">
         <h1>Inventario</h1>
         <div class="view-actions">
+          <button id="add-product-btn" class="btn-secondary" title="Agregar producto manual">+ Nuevo</button>
           <input id="search-input" type="search" class="form-input search-input"
                  placeholder="Búsqueda semántica…" />
           <button id="search-btn" class="btn-primary">Buscar</button>
@@ -149,9 +158,9 @@
       <div class="wizard-panel" id="wizard-step-1">
         <div class="dropzone" id="dropzone">
           <span class="dropzone-icon">📂</span>
-          <p>Arrastra tu CSV aquí o <label for="csv-file" class="link-btn">elige un archivo</label></p>
-          <input type="file" id="csv-file" accept=".csv" class="hidden" />
-          <p class="dropzone-hint">Formato compatible: exportación de inventario Shopify</p>
+          <p>Arrastra tu archivo aquí o <label for="csv-file" class="link-btn">elige un archivo</label></p>
+          <input type="file" id="csv-file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="hidden" />
+          <p class="dropzone-hint">Formatos compatibles: CSV (.csv), Excel (.xls, .xlsx)</p>
         </div>
         <button id="wizard-next-1" class="btn-primary btn-full" disabled>Continuar →</button>
       </div>
@@ -200,7 +209,654 @@
       </div>
     </section>
 
+    <!-- Vista: Escáner de inventario rápido -->
+    <section id="view-scanner" class="view">
+      <div class="view-header">
+        <h1>Entrada Rápida / Escáner</h1>
+        <p class="view-subtitle">Escanea códigos de barras para ajustar stock rápidamente.</p>
+      </div>
+
+      <div class="scanner-container">
+        <!-- Panel de entrada -->
+        <div class="scanner-panel">
+          <div class="form-group">
+            <label for="scanner-input" class="scanner-label">Código de barras (SKU)</label>
+            <div class="scanner-input-wrapper">
+              <input type="text" id="scanner-input" class="form-input scanner-box" 
+                     placeholder="Escanea aquí..." autocomplete="off" autofocus />
+              <button id="camera-scan-btn" class="btn-icon camera-btn" title="Usar cámara">📷</button>
+            </div>
+          </div>
+          
+          <div class="scanner-controls">
+            <div class="control-group">
+              <label>Acción:</label>
+              <div class="toggle-group">
+                <button class="toggle-btn active" data-action="add">Entrada (+)</button>
+                <button class="toggle-btn" data-action="subtract">Salida (-)</button>
+              </div>
+            </div>
+            
+            <div class="control-group">
+              <label>Cantidad:</label>
+              <input type="number" id="scanner-qty" class="form-input qty-input" value="1" min="1" />
+            </div>
+          </div>
+
+          <div id="scanner-feedback" class="scanner-feedback hidden">
+            <!-- Feedback dinámico: éxito o error -->
+          </div>
+        </div>
+
+        <!-- Historial reciente -->
+        <div class="scanner-history">
+          <h3>Últimos movimientos</h3>
+          <ul id="scanner-log" class="history-list">
+            <!-- Items de historial -->
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista: Punto de venta (POS) -->
+    <section id="view-pos" class="view">
+      <main id="pos-app" class="pos-container">
+        <div class="pos-grid">
+          <!-- Columna izquierda: Búsqueda de productos y carrito -->
+          <div class="pos-column-left">
+            <!-- Búsqueda rápida -->
+            <div class="search-section">
+              <h3 class="section-title">Búsqueda de productos</h3>
+              <div class="search-box">
+                <input type="search" id="product-search" class="form-input search-input-lg"
+                       placeholder="SKU, nombre, descripción…" autocomplete="off" />
+                <button id="search-clear" class="btn-icon">✕</button>
+              </div>
+              <div id="search-results" class="search-results">
+                <div class="empty-results">Escribe para buscar productos</div>
+              </div>
+            </div>
+
+            <!-- Carrito de venta -->
+            <div class="cart-section">
+              <h3 class="section-title">
+                Carrito de venta
+                <span id="cart-item-count" class="badge">0</span>
+              </h3>
+              <div id="cart-items" class="cart-items">
+                <div class="empty-cart">No hay productos en el carrito</div>
+              </div>
+              <div class="cart-totals">
+                <div class="total-row">
+                  <span>Subtotal:</span>
+                  <span id="cart-subtotal">$0.00</span>
+                </div>
+                <div class="total-row">
+                  <span>Descuento:</span>
+                  <span id="cart-discount">$0.00</span>
+                </div>
+                <div class="total-row">
+                  <span>IVA (16%):</span>
+                  <span id="cart-tax">$0.00</span>
+                </div>
+                <div class="total-row total-row-grand">
+                  <span>TOTAL:</span>
+                  <span id="cart-total">$0.00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna derecha: Teclado numérico y acciones -->
+          <div class="pos-column-right">
+            <!-- Teclado numérico -->
+            <div class="keypad-section">
+              <h3 class="section-title">Teclado</h3>
+              <div class="keypad-grid">
+                <button class="keypad-btn" data-key="7">7</button>
+                <button class="keypad-btn" data-key="8">8</button>
+                <button class="keypad-btn" data-key="9">9</button>
+                <button class="keypad-btn" data-key="+">+</button>
+                
+                <button class="keypad-btn" data-key="4">4</button>
+                <button class="keypad-btn" data-key="5">5</button>
+                <button class="keypad-btn" data-key="6">6</button>
+                <button class="keypad-btn" data-key="-">–</button>
+                
+                <button class="keypad-btn" data-key="1">1</button>
+                <button class="keypad-btn" data-key="2">2</button>
+                <button class="keypad-btn" data-key="3">3</button>
+                <button class="keypad-btn" data-key="*">×</button>
+                
+                <button class="keypad-btn" data-key="0">0</button>
+                <button class="keypad-btn" data-key=".">.</button>
+                <button class="keypad-btn" data-key="backspace">⌫</button>
+                <button class="keypad-btn" data-key="clear">C</button>
+              </div>
+              <div class="keypad-actions">
+                <button id="apply-discount-btn" class="btn-secondary">Descuento %</button>
+                <button id="set-quantity-btn" class="btn-secondary">Cantidad</button>
+                <button id="set-price-btn" class="btn-secondary">Precio unit.</button>
+              </div>
+            </div>
+
+            <!-- Método de pago -->
+            <div class="payment-section">
+              <h3 class="section-title">Método de pago</h3>
+              <div class="payment-methods">
+                <button class="payment-method active" data-method="cash">Efectivo</button>
+                <button class="payment-method" data-method="card">Tarjeta</button>
+                <button class="payment-method" data-method="transfer">Transferencia</button>
+                <button class="payment-method" data-method="mixed">Mixto</button>
+              </div>
+              <div class="payment-input">
+                <label for="cash-received">Efectivo recibido:</label>
+                <input type="number" id="cash-received" class="form-input" step="0.01" value="0.00" />
+              </div>
+              <div id="change-display" class="change-display hidden">
+                <span>Cambio:</span>
+                <span id="change-amount">$0.00</span>
+              </div>
+            </div>
+
+            <!-- Acciones principales -->
+            <div class="actions-section">
+              <button id="checkout-btn" class="btn-primary btn-large" disabled>
+                <span class="btn-icon">💳</span>
+                COBRAR VENTA
+              </button>
+              <button id="cancel-sale-btn" class="btn-danger btn-large">
+                <span class="btn-icon">✕</span>
+                CANCELAR VENTA
+              </button>
+              <button id="hold-sale-btn" class="btn-secondary">
+                <span class="btn-icon">⏸</span>
+                Pausar venta
+              </button>
+              <button id="sync-offline-btn" class="btn-secondary" title="Sincronizar ventas offline">
+                <span class="btn-icon">↻</span>
+                Sincronizar offline
+              </button>
+            </div>
+
+            <!-- Información adicional -->
+            <div class="info-section">
+              <h3 class="section-title">Información</h3>
+              <div class="info-items" style="margin-bottom: 1rem;">
+                <div class="info-item">
+                  <span>Productos en carrito:</span>
+                  <span id="info-cart-items">0</span>
+                </div>
+                <!-- ... -->
+              </div>
+              
+              <!-- Botones de control de sesión -->
+              <div class="session-controls" style="display: flex; gap: 0.5rem; justify-content: space-between;">
+                <button id="open-session-btn" class="btn-sm btn-primary">Abrir Caja</button>
+                <div id="cash-session-status" class="hidden">
+                  <span id="cash-session-text">Caja Abierta</span>
+                  <button id="close-session-btn" class="btn-sm btn-danger">Cerrar</button>
+                </div>
+              </div>
+            </div>
+                <div class="info-item">
+                  <span>Artículos totales:</span>
+                  <span id="info-total-items">0</span>
+                </div>
+                <div class="info-item">
+                  <span>Sesión de caja:</span>
+                  <span id="info-session-id">—</span>
+                </div>
+                <div class="info-item">
+                  <span>Estado conexión:</span>
+                  <span id="connection-status" class="online">● En línea</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- ── VISTA: Compras & Traspasos ──────────────────────────────────── -->
+    <section id="view-purchases" class="view">
+      <div class="view-header">
+        <h1>Compras &amp; Entradas</h1>
+        <p class="view-subtitle">Registro de compras a proveedores y traspasos entre sucursales.</p>
+      </div>
+
+    <!-- Tabs del módulo -->
+    <div class="purch-module-tabs">
+      <button class="purch-module-tab active" data-tab="purchase">📦 Nueva Compra</button>
+      <button class="purch-module-tab" data-tab="transfer">↔ Traspaso</button>
+      <button class="purch-module-tab" data-tab="history">📋 Historial</button>
+    </div>
+
+    <!-- ── Panel: Compra ──────────────────────────────────────────────── -->
+    <div id="purch-panel-purchase" class="purch-module-panel">
+
+      <!-- Cabecera de la orden -->
+      <div class="purch-header-form">
+        <div class="purch-form-row">
+          <div class="purch-form-col">
+            <label class="form-label">Proveedor</label>
+            <div class="select-action-row">
+              <select id="purch-supplier" class="form-input">
+                <option value="">Sin proveedor (entrada directa)</option>
+              </select>
+              <button id="purch-new-supplier-btn" class="btn-ghost btn-sm">+ Nuevo</button>
+            </div>
+          </div>
+          <div class="purch-form-col">
+            <label class="form-label">Referencia / Folio</label>
+            <input id="purch-reference" type="text" class="form-input"
+                   placeholder="No. factura, nota, folio…" />
+          </div>
+          <div class="purch-form-col">
+            <label class="form-label">Fecha esperada</label>
+            <input id="purch-date" type="date" class="form-input" />
+          </div>
+        </div>
+        <div class="purch-form-row">
+          <div class="purch-form-col purch-col-full">
+            <label class="form-label">Notas</label>
+            <input id="purch-notes" type="text" class="form-input"
+                   placeholder="Notas opcionales…" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Área de escaneo -->
+      <div class="purch-scan-area">
+        <div class="purch-scan-row">
+          <input type="text" id="purch-scan-input" class="form-input scanner-box"
+                 placeholder="Escanea código de barras o escribe SKU…"
+                 autocomplete="off" />
+          <input type="number" id="purch-qty"  class="form-input qty-input"
+                 value="1" min="1" title="Cantidad" />
+          <input type="number" id="purch-cost" class="form-input cost-input"
+                 step="0.01" value="0.00" min="0" placeholder="Costo unit." title="Costo unitario" />
+          <button id="purch-add-btn" class="btn-primary">+ Agregar</button>
+          <button id="purch-import-doc-btn" class="btn-ghost" title="Importar nota o PDF">📄 Importar nota</button>
+        </div>
+        <div id="purch-scan-feedback" class="scanner-feedback hidden"></div>
+      </div>
+
+      <!-- Tabla de líneas de compra -->
+      <div class="table-wrapper">
+        <table class="purch-table">
+          <thead>
+            <tr>
+              <th style="width:3rem">#</th>
+              <th>SKU</th>
+              <th>Producto</th>
+              <th style="width:6rem">Cant.</th>
+              <th style="width:8rem">Costo unit.</th>
+              <th style="width:8rem">Total</th>
+              <th style="width:3rem"></th>
+            </tr>
+          </thead>
+          <tbody id="purch-items-tbody">
+            <tr><td colspan="7" class="table-empty">Agrega productos escaneando sus códigos de barras</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="purch-totals-row">
+        <span class="purch-total-label">Total de compra:</span>
+        <span id="purch-total-amount" class="purch-total-value">$0.00</span>
+      </div>
+
+      <!-- Acciones de la orden -->
+      <div class="purch-actions-row">
+        <button id="purch-save-draft-btn" class="btn-secondary">Crear orden</button>
+        <button id="purch-confirm-btn"    class="btn-primary btn-lg">✅ Confirmar recepción</button>
+        <div id="purch-active-order" class="purch-active-badge hidden">
+          <span class="badge-dot">●</span>
+          <span>Orden:</span>
+          <span id="purch-order-id-display" class="badge-mono">—</span>
+          <button id="purch-new-order-btn" class="btn-ghost btn-sm">Nueva</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Panel: Traspaso ────────────────────────────────────────────── -->
+    <div id="purch-panel-transfer" class="purch-module-panel hidden">
+
+      <div class="purch-header-form">
+        <div class="purch-form-row">
+          <div class="purch-form-col">
+            <label class="form-label">Sucursal origen</label>
+            <select id="trans-from-branch" class="form-input">
+              <option value="">Seleccionar…</option>
+            </select>
+          </div>
+          <div class="purch-form-col">
+            <label class="form-label">Sucursal destino</label>
+            <select id="trans-to-branch" class="form-input">
+              <option value="">Seleccionar…</option>
+            </select>
+          </div>
+          <div class="purch-form-col">
+            <label class="form-label">Motivo / Notas</label>
+            <input id="trans-notes" type="text" class="form-input"
+                   placeholder="Motivo del traspaso…" />
+          </div>
+        </div>
+      </div>
+
+      <div class="purch-scan-area">
+        <div class="purch-scan-row">
+          <input type="text" id="trans-scan-input" class="form-input scanner-box"
+                 placeholder="Escanea código de barras o escribe SKU…"
+                 autocomplete="off" />
+          <input type="number" id="trans-qty" class="form-input qty-input"
+                 value="1" min="1" title="Cantidad" />
+          <button id="trans-add-btn" class="btn-primary">+ Agregar</button>
+        </div>
+        <div id="trans-scan-feedback" class="scanner-feedback hidden"></div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="purch-table">
+          <thead>
+            <tr>
+              <th style="width:3rem">#</th>
+              <th>SKU</th>
+              <th>Producto</th>
+              <th style="width:9rem">Cant. a traspasar</th>
+              <th style="width:8rem">Stock actual</th>
+              <th style="width:3rem"></th>
+            </tr>
+          </thead>
+          <tbody id="trans-items-tbody">
+            <tr><td colspan="6" class="table-empty">Agrega productos a traspasar</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="purch-actions-row">
+        <button id="trans-save-btn"    class="btn-secondary">Crear traspaso</button>
+        <button id="trans-ship-btn"    class="btn-primary btn-lg">📤 Confirmar envío</button>
+        <button id="trans-receive-btn" class="btn-success btn-lg hidden">📥 Confirmar recepción</button>
+        <div id="trans-active-badge" class="purch-active-badge hidden">
+          <span class="badge-dot">●</span>
+          <span>Traspaso:</span>
+          <span id="trans-id-display" class="badge-mono">—</span>
+          <button id="trans-new-btn" class="btn-ghost btn-sm">Nuevo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Panel: Historial ───────────────────────────────────────────── -->
+    <div id="purch-panel-history" class="purch-module-panel hidden">
+      <div class="purch-hist-header">
+        <div class="purch-hist-tabs">
+          <button class="purch-hist-tab active" data-hist="purchases">Compras</button>
+          <button class="purch-hist-tab" data-hist="transfers">Traspasos</button>
+        </div>
+        <button id="hist-refresh-btn" class="btn-ghost btn-sm">↻ Refrescar</button>
+      </div>
+
+      <!-- Historial de compras -->
+      <div id="hist-purchases-list" class="hist-list">
+        <div class="table-wrapper">
+          <table class="purch-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Proveedor</th>
+                <th>Referencia</th>
+                <th style="width:5rem">Arts.</th>
+                <th style="width:9rem">Total</th>
+                <th style="width:7rem">Estado</th>
+                <th style="width:5rem"></th>
+              </tr>
+            </thead>
+            <tbody id="hist-purchases-tbody">
+              <tr><td colspan="7" class="table-empty">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Historial de traspasos -->
+      <div id="hist-transfers-list" class="hist-list hidden">
+        <div class="table-wrapper">
+          <table class="purch-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>De</th>
+                <th>A</th>
+                <th style="width:5rem">Arts.</th>
+                <th style="width:7rem">Estado</th>
+                <th style="width:10rem"></th>
+              </tr>
+            </thead>
+            <tbody id="hist-transfers-tbody">
+              <tr><td colspan="6" class="table-empty">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+    </div>
+    </section>
+    <!-- ── /VISTA Compras ────────────────────────────────────────────────── -->
+
+    <!-- ── VISTA: Flujo de Caja ────────────────────────────────────────────── -->
+    <section id="view-finance" class="view">
+      <div class="view-header">
+        <h2 class="view-title">Flujo de Caja y Gastos</h2>
+      </div>
+      <div class="finance-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding: 1.5rem;">
+        
+        <!-- Tarjeta de Resumen -->
+        <div class="card p-4">
+          <h3 style="font-weight: 600; margin-top:0; border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">Resumen Global</h3>
+          <div style="margin-top: 1rem;">
+            <p><strong>Ingresos (Ventas):</strong> <span id="fin-income" style="color:var(--success-color); float:right;">$0.00</span></p>
+            <p><strong>Egresos (Compras):</strong> <span id="fin-purchases" style="color:var(--error-color); float:right;">$0.00</span></p>
+            <p><strong>Egresos (Gastos Fijos):</strong> <span id="fin-expenses" style="color:var(--error-color); float:right;">$0.00</span></p>
+            <hr style="border: 1px solid var(--border-color); margin: 1rem 0;" />
+            <h4 style="font-size: 1.25rem;">Flujo Neto: <span id="fin-cashflow" style="float:right;">$0.00</span></h4>
+          </div>
+          <button id="fin-refresh" class="btn-secondary" style="margin-top:2rem; width:100%;">Actualizar Reporte</button>
+        </div>
+
+        <!-- Formulario de Gastos -->
+        <div class="card p-4">
+          <h3 style="font-weight: 600; margin-top:0; border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">Registrar Gasto Fijo</h3>
+          <form id="fin-expense-form" style="margin-top: 1rem;" autocomplete="off">
+            <div class="form-group">
+              <label>Categoría</label>
+              <select id="fin-cat" class="form-input" required>
+                <option value="rent">Renta</option>
+                <option value="utilities">Servicios (Luz, Agua)</option>
+                <option value="internet">Internet / Teléfono</option>
+                <option value="salary">Salarios</option>
+                <option value="other">Otros</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Monto</label>
+              <input type="number" id="fin-amount" class="form-input" required step="0.01" min="0.01">
+            </div>
+            <div class="form-group">
+              <label>Descripción / Concepto</label>
+              <input type="text" id="fin-desc" class="form-input" placeholder="Pago de renta mes de marzo...">
+            </div>
+            <button type="submit" class="btn-primary" style="width:100%;">Registrar Gasto</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
   </main>
+
+  <!-- ── New Product Modal ──────────────────────────────────────────────── -->
+  <div id="product-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 class="modal-title">Nuevo Producto</h2>
+      <form id="product-form" autocomplete="off">
+        <label>Nombre *</label>
+        <input id="prod-title" type="text" class="form-input" required />
+        
+        <label>SKU</label>
+        <input id="prod-sku" type="text" class="form-input" />
+        
+        <label>Precio</label>
+        <input id="prod-price" type="number" step="0.01" class="form-input" value="0.00" />
+        
+        <label>Stock (On Hand)</label>
+        <input id="prod-stock" type="number" class="form-input" value="0" />
+        
+        <label>Descripción (para Embeddings)</label>
+        <textarea id="prod-desc" class="form-input" rows="3"></textarea>
+      
+        <div class="form-buttons" style="margin-top: 1rem; display: flex; gap: 1rem;">
+          <button type="submit" class="btn-primary">Guardar</button>
+          <button type="button" id="cancel-prod-btn" class="btn-secondary">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Modal para descuento ────────────────────────────────────────────── -->
+  <div id="discount-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 class="modal-title">Aplicar descuento</h2>
+      <p>Selecciona tipo de descuento:</p>
+      <div class="discount-options">
+        <button class="discount-option" data-type="percent">Porcentaje (%)</button>
+        <button class="discount-option" data-type="amount">Monto fijo ($)</button>
+      </div>
+      <div class="discount-input hidden">
+        <label id="discount-label">Valor:</label>
+        <input type="number" id="discount-value" class="form-input" step="0.01" />
+        <button id="apply-discount-confirm" class="btn-primary">Aplicar</button>
+      </div>
+      <button id="close-discount-modal" class="btn-secondary">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- ── Modal: Nuevo Proveedor ──────────────────────────────────────────── -->
+  <div id="purch-supplier-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 class="modal-title">Nuevo Proveedor</h2>
+      <form id="purch-supplier-form" autocomplete="off">
+        <label class="form-label">Nombre *</label>
+        <input id="purch-sup-name" type="text" class="form-input" required placeholder="Nombre del proveedor" />
+        <label class="form-label">Contacto</label>
+        <input id="purch-sup-contact" type="text" class="form-input" placeholder="Nombre del contacto" />
+        <label class="form-label">Email</label>
+        <input id="purch-sup-email" type="email" class="form-input" placeholder="correo@proveedor.com" />
+        <label class="form-label">Teléfono</label>
+        <input id="purch-sup-phone" type="text" class="form-input" placeholder="+52…" />
+        <label class="form-label">RFC / Tax ID</label>
+        <input id="purch-sup-taxid" type="text" class="form-input" placeholder="RFC del proveedor" />
+        <div class="form-buttons">
+          <button type="submit" class="btn-primary">Guardar</button>
+          <button type="button" id="purch-supplier-cancel" class="btn-secondary">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Modal: Registro Rápido de Producto ────────────────────────────── -->
+  <div id="purch-reg-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 class="modal-title">Registrar Producto Nuevo</h2>
+      <p class="modal-subtitle">El código escaneado no existe. Regístralo para continuar.</p>
+      <form id="purch-reg-form" autocomplete="off">
+        <label class="form-label">Código (SKU / Barcode)</label>
+        <input id="purch-reg-sku" type="text" class="form-input" placeholder="Código de barras" />
+        <label class="form-label">Nombre del producto *</label>
+        <input id="purch-reg-title" type="text" class="form-input" required placeholder="Nombre o descripción corta" />
+        <label class="form-label">Descripción (para búsqueda IA)</label>
+        <textarea id="purch-reg-desc" class="form-input" rows="2"
+                  placeholder="Marca, modelo, características…"></textarea>
+                  
+        <div style="display:flex; gap:10px;">
+            <div style="flex:1;">
+                <label class="form-label">Menudeo</label>
+                <input id="purch-reg-price" type="number" step="0.01" class="form-input" value="" placeholder="0.00" required />
+            </div>
+            <div style="flex:1;">
+                <label class="form-label">Medio Mayoreo</label>
+                <input id="purch-reg-price-mid" type="number" step="0.01" class="form-input" value="" placeholder="0.00" />
+            </div>
+            <div style="flex:1;">
+                <label class="form-label">Mayoreo</label>
+                <input id="purch-reg-price-wholesale" type="number" step="0.01" class="form-input" value="" placeholder="0.00" />
+            </div>
+        </div>
+
+        <div class="form-buttons">
+          <button type="submit" class="btn-primary">Registrar y agregar</button>
+          <button type="button" id="purch-reg-cancel" class="btn-secondary">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Modal: Importar Nota / PDF con IA ────────────────────────────── -->
+  <div id="purch-import-modal" class="modal-overlay hidden">
+    <div class="modal-card modal-wide">
+      <h2 class="modal-title">📄 Importar Nota de Compra con IA</h2>
+      <p class="modal-subtitle">Pega el texto de la nota/factura y la IA extraerá los productos automáticamente. Para PDFs, abre el archivo y copia el texto.</p>
+
+      <div class="import-file-row">
+        <label class="form-label">Cargar archivo de texto / CSV:</label>
+        <input id="purch-import-file" type="file" accept=".txt,.csv" class="form-input" />
+      </div>
+
+      <label class="form-label">Texto de la nota (pegar aquí):</label>
+      <textarea id="purch-import-text" class="form-input import-textarea"
+                rows="8" placeholder="Pega aquí el texto de tu factura o nota de compra…"></textarea>
+
+      <div class="import-actions">
+        <button id="purch-import-text-submit" class="btn-primary">🤖 Extraer con IA</button>
+        <button id="purch-import-cancel" class="btn-secondary">Cancelar</button>
+      </div>
+
+      <div id="purch-import-spinner" class="import-spinner hidden">
+        <div class="spinner"></div> Analizando con IA…
+      </div>
+
+      <!-- Resultados del análisis -->
+      <div id="purch-import-results" class="hidden">
+        <h3 class="import-results-title">Productos detectados — revisa y corrige:</h3>
+        <div class="table-wrapper">
+          <table class="purch-table">
+            <thead>
+              <tr>
+                <th style="width:3rem">#</th>
+                <th style="width:9rem">SKU</th>
+                <th>Descripción</th>
+                <th style="width:6rem">Cant.</th>
+                <th style="width:8rem">Costo unit.</th>
+              </tr>
+            </thead>
+            <tbody id="purch-import-results-tbody"></tbody>
+          </table>
+        </div>
+        <div class="import-actions">
+          <button id="purch-import-confirm" class="btn-primary">Agregar a la orden</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Confirmación genérico ─────────────────────────────────── -->
+  <div id="purch-confirm-modal" class="modal-overlay hidden">
+    <div class="modal-card modal-sm">
+      <h2 class="modal-title">Confirmar acción</h2>
+      <p id="purch-confirm-message" class="confirm-message">¿Estás seguro?</p>
+      <div class="form-buttons">
+        <button id="purch-confirm-ok" class="btn-primary">Confirmar</button>
+        <button id="purch-confirm-cancel" class="btn-secondary">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Scripts ─────────────────────────────────────────────────────────── -->
   <script src="js/db.js"></script>
@@ -208,8 +864,10 @@
   <script src="js/wizard.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/chat-ui.js"></script>
-
-  <script>
+  <script src="js/scanner.js"></script>
+  <script src="js/pos.js"></script>
+  <script src="js/purchases.js"></script>
+    <script src="js/finance.js"></script>
     // Registro del Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js')
@@ -218,7 +876,8 @@
     }
 
     // ── Autenticación y navegación ──────────────────────────────────────────
-    const API_BASE = 'http://localhost:3000';
+    const API_BASE = '';
+    let posInitialized = false;
 
     const loginModal = document.getElementById('login-modal');
     const loginForm  = document.getElementById('login-form');
@@ -226,10 +885,53 @@
     const appEl      = document.getElementById('app');
     const logoutBtn  = document.getElementById('logout-btn');
 
+    // Función para detectar token expirado (sin verificar firma, solo exp)
+    function isTokenExpired(token) {
+      try {
+        const payload = token.split('.')[1];
+        const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+        if (decoded.exp && typeof decoded.exp === 'number') {
+          return decoded.exp < (Date.now() / 1000);
+        }
+        return false; // Si no tiene exp, asumimos no expirado
+      } catch (e) {
+        console.warn('Error al decodificar token', e);
+        return true; // Si no se puede decodificar, asumir inválido
+      }
+    }
+
+    // Forzar cierre de sesión (sin botón)
+    function forceLogout() {
+      localStorage.removeItem('agentica_token');
+      appEl.classList.add('hidden');
+      loginModal.classList.remove('hidden');
+      loginModal.classList.add('active');
+    }
+
+    // Interceptar respuestas 401 (token expirado)
+    const originalFetch = window.fetch;
+    window.fetch = function (...args) {
+      return originalFetch.apply(this, args).then(response => {
+        if (response.status === 401 && !response.url.includes('/api/auth/login')) {
+          console.warn('Token expirado detectado en fetch, forzando logout');
+          forceLogout();
+          // Opcional: rechazar la promesa para que el código que espera la respuesta no continúe
+          return Promise.reject(new Error('Token expirado, sesión cerrada'));
+        }
+        return response;
+      });
+    };
+
     // Verificar si ya hay sesión activa
     (function checkSession() {
       const token = localStorage.getItem('agentica_token');
       if (token) {
+        // Si el token está expirado, cerrar sesión automáticamente
+        if (isTokenExpired(token)) {
+          console.warn('Token expirado, forzando logout');
+          localStorage.removeItem('agentica_token');
+          return;
+        }
         loginModal.classList.remove('active');
         loginModal.classList.add('hidden');
         appEl.classList.remove('hidden');
@@ -281,6 +983,12 @@
         document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
         const target = document.getElementById(`view-${viewId}`);
         if (target) target.classList.add('active');
+
+        // Inicializar módulos específicos de la vista
+        if (viewId === 'pos' && typeof POS !== 'undefined' && !posInitialized) {
+          POS.init();
+          posInitialized = true;
+        }
       });
     });
   </script>

@@ -25,13 +25,16 @@ async function chat(req, res, next) {
     const reply = await aiService.chat(sanitized, productContext || '');
     res.json({ reply });
   } catch (err) {
+    if (err.status === 401) {
+       console.error('[AI Error] Auth fallida con el proveedor de IA. Revisa OPENAI_API_KEY.');
+    }
     next(err);
   }
 }
 
 /**
  * GET /api/chat/search?q=...
- * Búsqueda semántica de productos usando embeddings.
+ * Búsqueda semántica de productos usando embeddings, filtrada por tenant/sucursal.
  */
 async function search(req, res, next) {
   try {
@@ -41,7 +44,13 @@ async function search(req, res, next) {
       return res.status(400).json({ error: 'Parámetro "q" requerido' });
     }
 
-    const result = await inventoryService.getProducts(q, limit, offset);
+    const result = await inventoryService.getProducts(
+      req.tenantId,
+      req.branchId,
+      q,
+      limit,
+      offset
+    );
     res.json(result);
   } catch (err) {
     next(err);

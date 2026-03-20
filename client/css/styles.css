@@ -688,3 +688,399 @@ body {
   .metrics-grid { grid-template-columns: 1fr; }
   .wizard-panel { padding: 1rem; }
 }
+
+/* ============================================================
+   MÓDULO DE COMPRAS & TRASPASOS
+   ============================================================ */
+
+/* ── Tabs del módulo ─────────────────────────────────────── */
+.purch-module-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0;
+}
+
+.purch-module-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  padding: 0.6rem 1.2rem;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+  text-transform: uppercase;
+}
+
+.purch-module-tab:hover { color: var(--text-primary); }
+.purch-module-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Panel de módulo ─────────────────────────────────────── */
+.purch-module-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.purch-module-panel.hidden { display: none !important; }
+
+/* ── Formulario de cabecera ──────────────────────────────── */
+.purch-header-form {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.purch-form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.purch-form-col {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.purch-col-full { flex: 100; }
+
+/* ── Área de escaneo ─────────────────────────────────────── */
+.purch-scan-area {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+}
+
+.purch-scan-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.purch-scan-row .scanner-box {
+  flex: 1;
+  min-width: 220px;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  background: var(--bg-base);
+  border-color: var(--accent);
+}
+
+.purch-scan-row .qty-input  { width: 5rem; }
+.purch-scan-row .cost-input { width: 7rem; }
+
+.select-action-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.select-action-row select { flex: 1; }
+
+/* ── Tabla de ítems de compra ────────────────────────────── */
+.purch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.purch-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+}
+
+.purch-table td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.purch-table tr:last-child td { border-bottom: none; }
+.purch-table tr:hover td { background: var(--bg-hover); }
+
+.td-mono  { font-family: var(--font-mono); font-size: 0.82rem; }
+.td-center { text-align: center; }
+.td-money { text-align: right; font-family: var(--font-mono); color: var(--accent); }
+.td-num   { text-align: right; }
+
+/* Inline edit inputs */
+.inline-num {
+  width: 5rem;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.2rem 0.4rem;
+  text-align: right;
+}
+.inline-num:focus { outline: none; border-color: var(--accent); }
+
+.form-input-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+/* ── Totales ─────────────────────────────────────────────── */
+.purch-totals-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.purch-total-label {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.purch-total-value {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ── Fila de acciones ────────────────────────────────────── */
+.purch-actions-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn-lg {
+  padding: 0.65rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.btn-success {
+  background: var(--success);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: opacity var(--transition);
+}
+.btn-success:hover { opacity: 0.85; }
+
+/* ── Insignia orden/traspaso activo ──────────────────────── */
+.purch-active-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.badge-dot  { color: var(--success); font-size: 0.65rem; }
+.badge-mono { font-family: var(--font-mono); color: var(--accent); }
+
+/* ── Historial ───────────────────────────────────────────── */
+.purch-hist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.purch-hist-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.purch-hist-tab {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition),
+              border-color var(--transition);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.purch-hist-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.purch-hist-tab.active {
+  color: var(--accent);
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.hist-list.hidden { display: none !important; }
+
+/* ── Badges de estado ────────────────────────────────────── */
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.status-draft    { background: rgba(74,85,104,.4); color: var(--text-secondary); }
+.status-pending  { background: rgba(245,158,11,.15); color: var(--warning); }
+.status-received,
+.status-shipped  { background: rgba(16,185,129,.15); color: var(--success); }
+.status-cancelled { background: rgba(239,68,68,.15); color: var(--danger); }
+
+/* ── Botones pequeños en tabla ───────────────────────────── */
+.btn-icon-sm {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.4rem;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.btn-danger-sm {
+  border-color: transparent;
+  color: var(--danger);
+  opacity: 0.6;
+}
+.btn-danger-sm:hover { opacity: 1; background: rgba(239,68,68,.15); }
+
+/* ── Modal ancho (para importar nota) ───────────────────── */
+.modal-wide { width: min(860px, 96vw); max-height: 90vh; overflow-y: auto; }
+.modal-sm   { width: min(400px, 96vw); }
+
+.modal-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.confirm-message {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 1rem 0;
+  white-space: pre-line;
+}
+
+/* ── Importar nota ───────────────────────────────────────── */
+.import-file-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.import-textarea {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 160px;
+}
+
+.import-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  align-items: center;
+}
+
+.import-spinner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  padding: 0.5rem 0;
+}
+
+.import-results-title {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.75rem;
+  margin-top: 1rem;
+}
+
+/* ── Toast de notificación ───────────────────────────────── */
+.purch-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(120%);
+  z-index: 9999;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  padding: 0.65rem 1.25rem;
+  box-shadow: var(--shadow-lg);
+  transition: transform 250ms ease, opacity 250ms ease;
+  opacity: 0;
+  max-width: 90vw;
+  text-align: center;
+}
+
+.purch-toast.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.purch-toast-success { border-color: var(--success); color: var(--success); }
+.purch-toast-error   { border-color: var(--danger);  color: var(--danger); }
+.purch-toast-info    { border-color: var(--info);    color: var(--info); }
+
+/* ── Responsive del módulo ───────────────────────────────── */
+@media (max-width: 768px) {
+  .purch-form-row     { flex-direction: column; }
+  .purch-scan-row     { flex-direction: column; }
+  .purch-actions-row  { flex-direction: column; }
+  .purch-scan-row .scanner-box { width: 100%; }
+  .purch-scan-row .qty-input,
+  .purch-scan-row .cost-input  { width: 100%; }
+  .purch-module-tab   { padding: 0.5rem 0.7rem; font-size: 0.75rem; }
+}
+

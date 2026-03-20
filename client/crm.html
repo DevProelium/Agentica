@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f1117" />
+  <meta name="description" content="Agentica CRM — Ventas B2B y Cotizaciones" />
+  <title>Agentica CRM & Ventas B2B</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Íconos -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤝</text></svg>" />
+
+  <!-- Estilos (Reutilizamos la base sólida de Agentica) -->
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/crm.css" />
+
+  <!-- Dexie.js para IndexedDB offline -->
+  <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Encabezado ──────────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-brand">
+      <span class="brand-icon">⬡</span>
+      <span class="brand-name">AGENTICA</span>
+      <span class="brand-sub">CRM & B2B</span>
+    </div>
+    
+    <nav class="header-nav">
+      <button class="nav-btn active" data-view="dashboard">Dashboard CRM</button>
+      <button class="nav-btn" data-view="clients">Directorio de Clientes</button>
+      <button class="nav-btn" data-view="quotes">Cotizaciones</button>
+      <a href="/index.html" class="nav-btn" style="text-decoration:none; color:var(--text-muted)">← Volver a Inventario</a>
+    </nav>
+    
+    <div class="header-user">
+      <div class="user-status online" id="status-indicator" title="Conectado"></div>
+      <span class="user-name" id="user-display">Usuario</span>
+      <button id="logout-btn" class="btn-ghost" title="Cerrar sesión">🚪</button>
+    </div>
+  </header>
+
+  <!-- ── Contenedor Principal ────────────────────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- ✅ Vista: Dashboard CRM -->
+    <section id="view-dashboard" class="view active">
+      <div class="view-header">
+        <h1>Dashboard Comercial</h1>
+        <p class="view-subtitle">Resumen de prospectos y cotizaciones recientes.</p>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Clientes Activos</div>
+          <div class="kpi-value" id="kpi-clients">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Cotizaciones Pendientes</div>
+          <div class="kpi-value" id="kpi-quotes">0</div>
+        </div>
+        <div class="kpi-card highlight">
+          <div class="kpi-title">Total Cotizado ($)</div>
+          <div class="kpi-value" id="kpi-total-quotes">$0.00</div>
+        </div>
+      </div>
+      
+      <div class="view-content" style="margin-top:2rem">
+          <h3>Actividad Reciente</h3>
+          <p style="color:var(--text-muted)">Aún no hay cotizaciones recientes...</p>
+      </div>
+    </section>
+
+    <!-- ✅ Vista: Directorio de Clientes -->
+    <section id="view-clients" class="view">
+      <div class="view-header flex-between">
+        <div>
+          <h1>Directorio B2B</h1>
+          <p class="view-subtitle">Gestión de prospectos, clientes y cuentas corporativas.</p>
+        </div>
+        <button class="btn-primary" id="btn-new-client">+ Nuevo Cliente</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-clients" placeholder="Buscar por cliente, razón social, RFC..." />
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="products-table">
+          <thead>
+            <tr>
+              <th>Cliente / Empresa</th>
+              <th>Razón Social</th>
+              <th>Tipo</th>
+              <th>Contacto</th>
+              <th>RFC/Tax ID</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="clients-tbody">
+            <!-- Renderizado por JS -->
+            <tr><td colspan="6" style="text-align:center;">Cargando clientes...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ✅ Vista: Cotizador Flexible (El "Mata-Excel") -->
+    <section id="view-quotes" class="view">
+      <div class="view-header flex-between">
+        <div>
+          <h1>Cotizador Flexible</h1>
+          <p class="view-subtitle">Arma presupuestos B2B rápidamente (Fricción Cero).</p>
+        </div>
+        <div>
+          <button class="btn-ghost">Ver Historial</button>
+          <button class="btn-primary" id="btn-save-quote">Guardar Cotización</button>
+        </div>
+      </div>
+
+      <div class="quote-workspace">
+        <!-- Panel Izquierdo: Datos Generales -->
+        <div class="quote-sidebar panel">
+          <h3>Datos del Cliente</h3>
+          <div class="form-group">
+            <label class="form-label">Seleccionar Cliente</label>
+            <select id="quote-client-select" class="form-input">
+              <option value="">-- Selecciona un cliente --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Validez (Días)</label>
+            <input type="number" id="quote-validity" class="form-input" value="15" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="display:flex; justify-content:space-between">
+              <span>Notas (Condiciones Comerciales)</span>
+              <button class="btn-ghost" style="padding:0;font-size:0.8rem">Insertar Plantilla</button>
+            </label>
+            <textarea id="quote-notes" class="form-input" rows="6" placeholder="- 50% Anticipo, 50% contra entrega.&#10;- Tiempo de entrega: 3 semanas."></textarea>
+          </div>
+        </div>
+
+        <!-- Panel Principal: El "Excel" (Partidas) -->
+        <div class="quote-main panel">
+          <h3>Partidas a cotizar</h3>
+          <div class="table-wrapper" style="overflow-x:visible">
+            <table class="products-table quote-table">
+              <thead>
+                <tr>
+                  <th style="width:50%">Concepto (Texto libre o SKU)</th>
+                  <th style="width:10%">Cant.</th>
+                  <th style="width:15%">Precio Unit.</th>
+                  <th style="width:10%">Desc. %</th>
+                  <th style="width:15%">Importe</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="quote-items-tbody">
+                <!-- Fila inicial por defecto -->
+                <tr class="quote-row">
+                  <td><input type="text" class="form-input q-concept" placeholder="Ej. Instalación de CCTV (Mano de obra)..." /></td>
+                  <td><input type="number" class="form-input q-qty" value="1" min="0.01" step="0.01" /></td>
+                  <td><input type="number" class="form-input q-price" value="0.00" min="0" step="0.01"/></td>
+                  <td><input type="number" class="form-input q-desc" value="0" min="0" max="100" /></td>
+                  <td class="q-row-total text-right font-medium">$0.00</td>
+                  <td><button class="btn-ghost text-danger btn-remove-row">✖</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <button class="btn-ghost" id="btn-add-row" style="margin-top: 0.5rem; color:var(--primary)">+ Agregar Fila</button>
+
+          <!-- Totales -->
+          <div class="quote-totals">
+            <div class="q-total-row"><span>Subtotal:</span> <span id="q-subtotal">$0.00</span></div>
+            <div class="q-total-row"><span>IVA (16%):</span> <span id="q-tax">$0.00</span></div>
+            <div class="q-total-row grand-total"><span>Total Neto:</span> <span id="q-total">$0.00</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: Crear Nuevo Cliente -->
+  <div id="modal-client" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Nuevo Cliente B2B</h2>
+        <button class="btn-close" id="btn-close-client-modal">✖</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-client">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label class="form-label">Nombre Comercial / Etiqueta *</label>
+              <input type="text" id="cli-name" class="form-input" required placeholder="Ej. Coca-Cola" />
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label">Razón Social</label>
+              <input type="text" id="cli-trade" class="form-input" placeholder="Ej. Bebidas Mundiales S.A. de C.V." />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label class="form-label">RFC / Tax ID</label>
+              <input type="text" id="cli-tax" class="form-input" />
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label">Sector / Tipo</label>
+              <select id="cli-type" class="form-input">
+                <option value="industrial">Industrial</option>
+                <option value="retail">Retail (Minorista)</option>
+                <option value="services">Servicios</option>
+                <option value="government">Gobierno</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label class="form-label">Contacto (Email)</label>
+              <input type="email" id="cli-email" class="form-input" />
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label">Teléfono</label>
+              <input type="text" id="cli-phone" class="form-input" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label class="form-label">Días de Crédito (0 = Contado)</label>
+              <input type="number" id="cli-credit" class="form-input" value="0" min="0" />
+            </div>
+          </div>
+          <button type="submit" class="btn-primary btn-full" style="margin-top: 1rem;">Guardar Cliente</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Inicialización rapidísima para redireccionar si no hay sesión antes de que carguen los demás scripts
+    const token = localStorage.getItem('agentica_token');
+    if (!token) {
+        window.location.href = '/index.html';
+    }
+  </script>
+  <!-- Scripts -->
+  <script src="js/db.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/crm.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,189 @@
+/* 
+  Estilos específicos para el módulo CRM de Agentica.
+  Reutiliza las variables de colors y fuentes de styles.css
+*/
+
+.crm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+/* Dashboard KPIs */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.kpi-card.highlight {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.05); /* asumiendo rgb, pero si no fallback */
+}
+
+.kpi-title {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpi-value {
+  color: var(--text);
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+/* Cotizador Flexible ("El Mata-Excel") */
+.quote-workspace {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+}
+
+.quote-sidebar h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.quote-main h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.quote-table {
+  width: 100%;
+}
+
+.quote-table th {
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.quote-table td {
+  padding: 0.5rem 0;
+}
+
+.q-concept { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem; background: var(--bg); color: var(--text); }
+.q-qty, .q-price, .q-desc { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem; background: var(--bg); color: var(--text); }
+.q-concept:focus, .q-qty:focus, .q-price:focus, .q-desc:focus { outline: none; border-color: var(--primary); }
+
+.quote-totals {
+  margin-top: 2rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.q-total-row {
+  display: flex;
+  justify-content: space-between;
+  width: 250px;
+  color: var(--text-muted);
+}
+
+.q-total-row span:last-child {
+  color: var(--text);
+  font-family: monospace;
+  font-size: 1.1rem;
+}
+
+.grand-total {
+  font-weight: bold;
+  font-size: 1.2rem;
+  color: var(--text);
+  border-top: 1px dashed var(--border);
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+.grand-total span:last-child {
+  color: var(--primary);
+  font-size: 1.4rem;
+}
+
+/* Modals & Forms */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 90%;
+  max-width: 600px;
+  padding: 2rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+}
+
+.modal-header h2 { margin: 0; font-size: 1.5rem; }
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.flex-1 { flex: 1; }
+
+@media (max-width: 768px) {
+  .quote-workspace {
+    grid-template-columns: 1fr;
+  }
+}

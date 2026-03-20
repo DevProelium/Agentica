@@ -33,8 +33,11 @@ async function uploadCSV(req, res, next) {
       req.file.mimetype
     );
 
-    // Procesar el CSV y hacer UPSERT en la base de datos
-    const stats = await inventoryService.processCSV(req.file.buffer);
+    // Procesar el CSV y hacer UPSERT en la base de datos, asignando tenant/branch
+    const stats = await inventoryService.processCSV(req.file.buffer, req.tenantId, req.branchId);
+
+    // Intentar generar embeddings para los productos insertados? (Opcional, podría ser pesado)
+    // Por ahora solo procesamos datos crudos.
 
     res.json({
       message:  'CSV procesado correctamente',
@@ -47,13 +50,36 @@ async function uploadCSV(req, res, next) {
 }
 
 /**
+ * POST /api/inventory
+ * Crea un producto individual manualmente.
+ */
+async function createProduct(req, res, next) {
+  try {
+    const product = await inventoryService.createProduct(
+      req.tenantId,
+      req.branchId,
+      req.body
+    );
+    res.status(201).json(product);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * GET /api/inventory
  * Lista productos con soporte de búsqueda semántica y paginación.
  */
 async function listProducts(req, res, next) {
   try {
     const { search, limit, offset } = req.query;
-    const result = await inventoryService.getProducts(search, limit, offset);
+    const result = await inventoryService.getProducts(
+      req.tenantId,
+      req.branchId,
+      search,
+      limit,
+      offset
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -62,7 +88,7 @@ async function listProducts(req, res, next) {
 
 /**
  * GET /api/inventory/:id
- * Devuelve un producto por su UUID.
+ * Devuelve un producto por su UUID, asegurando que pertenezca al tenant/sucursal.
  */
 async function getProduct(req, res, next) {
   try {
@@ -74,7 +100,17 @@ async function getProduct(req, res, next) {
       return res.status(400).json({ error: 'ID inválido' });
     }
 
-    const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    let query = 'SELECT * FROM products WHERE id = $1 AND tenant_id = $2';
+    const params = [id, req.tenantId];
+
+    if (req.branchId !== null && req.branchId !== undefined) {
+      // Usuario de sucursal: solo productos de su sucursal o matriz
+      query += ' AND (branch_id = $3 OR branch_id IS NULL)';
+      params.push(req.branchId);
+    }
+    // Si branchId es NULL (admin de tenant), no filtramos por branch
+
+    const result = await pool.query(query, params);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
@@ -86,7 +122,7 @@ async function getProduct(req, res, next) {
 
 /**
  * PUT /api/inventory/:id
- * Actualización parcial de un producto.
+ * Actualización parcial de un producto, asegurando que pertenezca al tenant/sucursal.
  */
 async function updateProduct(req, res, next) {
   try {
@@ -121,9 +157,19 @@ async function updateProduct(req, res, next) {
       return res.status(400).json({ error: 'No se proporcionaron campos para actualizar' });
     }
 
-    values.push(id);
+    // Agregar condiciones de tenant y branch
+    let whereClause = `id = $${idx} AND tenant_id = $${idx + 1}`;
+    values.push(id, req.tenantId);
+    idx += 2;
+
+    if (req.branchId !== null && req.branchId !== undefined) {
+      whereClause += ` AND (branch_id = $${idx} OR branch_id IS NULL)`;
+      values.push(req.branchId);
+      idx++;
+    }
+
     const query = `UPDATE products SET ${updates.join(', ')}, updated_at = NOW()
-                   WHERE id = $${idx} RETURNING *`;
+                   WHERE ${whereClause} RETURNING *`;
 
     const result = await pool.query(query, values);
     if (result.rows.length === 0) {
@@ -145,7 +191,7 @@ async function updateProduct(req, res, next) {
 
 /**
  * DELETE /api/inventory/:id
- * Elimina un producto por su UUID.
+ * Elimina un producto por su UUID, asegurando que pertenezca al tenant/sucursal.
  */
 async function deleteProduct(req, res, next) {
   try {
@@ -156,10 +202,15 @@ async function deleteProduct(req, res, next) {
       return res.status(400).json({ error: 'ID inválido' });
     }
 
-    const result = await pool.query(
-      'DELETE FROM products WHERE id = $1 RETURNING id',
-      [id]
-    );
+    let query = 'DELETE FROM products WHERE id = $1 AND tenant_id = $2 RETURNING id';
+    const params = [id, req.tenantId];
+
+    if (req.branchId !== null && req.branchId !== undefined) {
+      query += ' AND (branch_id = $3 OR branch_id IS NULL)';
+      params.push(req.branchId);
+    }
+
+    const result = await pool.query(query, params);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
@@ -171,4 +222,54 @@ async function deleteProduct(req, res, next) {
   }
 }
 
-module.exports = { upload, uploadCSV, listProducts, getProduct, updateProduct, deleteProduct };
+/**
+ * POST /api/inventory/scan
+ * Ajuste rápido de inventario mediante escaneo de código de barras.
+ * Body: { sku, quantity, type, reason }
+ */
+async function quickScan(req, res, next) {
+  try {
+    const { sku, quantity, type, reason } = req.body;
+
+    if (!sku) {
+      return res.status(400).json({ error: 'SKU es requerido' });
+    }
+    
+    // Valores por defecto
+    const qty = parseInt(quantity, 10) || 1; 
+    const txnType = type || 'adjustment';     
+    const txnReason = reason || 'quick_scan';
+
+    const result = await inventoryService.adjustStock(
+      req.tenantId,
+      req.branchId,
+      sku,
+      qty,
+      txnType,
+      txnReason,
+      req.user.id
+    );
+
+    res.json({
+      message: 'Stock actualizado correctamente',
+      data: result
+    });
+
+  } catch (err) {
+    if (err.message.includes('No encontrado')) {
+      return res.status(404).json({ error: err.message });
+    }
+    next(err);
+  }
+}
+
+module.exports = {
+  upload,
+  uploadCSV,
+  createProduct,
+  listProducts,
+  getProduct,
+  updateProduct,
+  deleteProduct,
+  quickScan
+};

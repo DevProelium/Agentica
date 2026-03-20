@@ -12,15 +12,22 @@ const swaggerUi = require('swagger-ui-express');
 const rateLimit = require('express-rate-limit');
 
 // Rutas
-const inventoryRoutes = require('./routes/inventory.routes');
-const chatRoutes      = require('./routes/chat.routes');
-const authRoutes      = require('./routes/auth.routes');
+const inventoryRoutes  = require('./routes/inventory.routes');
+const chatRoutes       = require('./routes/chat.routes');
+const authRoutes       = require('./routes/auth.routes');
+const salesRoutes      = require('./routes/sales.routes');
+const purchasesRoutes  = require('./routes/purchases.routes');
+const crmRoutes        = require('./routes/crm.routes');
+const financeRoutes    = require('./routes/finance.routes');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Middlewares de seguridad y parsing ───────────────────────────────────────
-app.use(helmet());
+// Deshabilitar Content-Security-Policy de Helmet que puede bloquear scripts inline/externos
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -56,12 +63,20 @@ try {
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
 } catch (err) {
   console.warn('[Swagger] No se pudo cargar swagger.yaml:', err.message);
+// Sirve la carpeta client en la raíz '/'
 }
+
+// ── Servir archivos estáticos del Frontend ───────────────────────────────────
+app.use(express.static(path.join(__dirname, '../client')));
 
 // ── Rutas de la API ──────────────────────────────────────────────────────────
 app.use('/api/auth',      authLimiter, authRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/chat',      chatRoutes);
+app.use('/api/sales',     salesRoutes);
+app.use('/api/purchases', purchasesRoutes);
+app.use('/api/crm',       crmRoutes);
+app.use('/api/finance',   financeRoutes);
 
 // ── Manejo de rutas no encontradas ──────────────────────────────────────────
 app.use((_req, res) => {

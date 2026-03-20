@@ -10,7 +10,7 @@
 (function () {
   'use strict';
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = '';
 
   let selectedFile = null;
 
@@ -100,13 +100,48 @@
 
   // ── Manejadores de eventos ───────────────────────────────────────────────────
 
+  async function handleSelectedFile(file) {
+    if (!file) return;
+
+    let processedFile = file;
+
+    // Si es Excel, convertirlo en vuelo a CSV usando SheetJS
+    if (file.name.match(/\.(xlsx|xls)$/i)) {
+      try {
+        dropzone.querySelector('p').textContent = `Convirtiendo Excel...`;
+        const data = await file.arrayBuffer();
+        // Verificar si existe la librería XLSX globalmente (cargada por index.html)
+        if (typeof XLSX === 'undefined') {
+          throw new Error('La librería SheetJS no está cargada');
+        }
+        const workbook = XLSX.read(data);
+        const firstSheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[firstSheetName];
+        const csvText = XLSX.utils.sheet_to_csv(sheet);
+        
+        // Crear un nuevo File disfrazado de CSV
+        processedFile = new File([csvText], file.name.replace(/\.(xlsx|xls)$/i, '.csv'), {
+          type: 'text/csv'
+        });
+      } catch (err) {
+        alert('Error procesando el archivo Excel: ' + err.message);
+        return;
+      }
+    }
+
+    if (!processedFile.name.match(/\.csv$/i)) {
+      alert('Formato no soportado. Sube un archivo CSV o Excel (.xls, .xlsx)');
+      return;
+    }
+
+    selectedFile = processedFile;
+    nextBtn1.disabled = false;
+    dropzone.querySelector('p').textContent = `Archivo seleccionado: ${file.name}`;
+  }
+
   // Selección de archivo por input
   fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) {
-      selectedFile = fileInput.files[0];
-      nextBtn1.disabled = false;
-      dropzone.querySelector('p').textContent = `Archivo seleccionado: ${selectedFile.name}`;
-    }
+    handleSelectedFile(fileInput.files[0]);
   });
 
   // Drag & drop en la zona de soltar
@@ -120,14 +155,7 @@
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropzone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith('.csv')) {
-      selectedFile = file;
-      nextBtn1.disabled = false;
-      dropzone.querySelector('p').textContent = `Archivo seleccionado: ${file.name}`;
-    } else {
-      alert('Solo se permiten archivos .csv');
-    }
+    handleSelectedFile(e.dataTransfer.files[0]);
   });
 
   // Clic en dropzone abre el input de archivo
@@ -195,7 +223,7 @@
     selectedFile = null;
     fileInput.value = '';
     nextBtn1.disabled = true;
-    dropzone.querySelector('p').textContent = 'Arrastra tu CSV aquí o ';
+    dropzone.querySelector('p').innerHTML = 'Arrastra tu archivo aquí o <label for="csv-file" class="link-btn">elige un archivo</label>';
     setStep(1);
   });
 
@@ -230,7 +258,32 @@
       ${errors.length > 0 ? `<ul style="margin-top:0.75rem;padding-left:1rem;font-size:0.8rem;color:var(--danger)">
         ${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}
       </ul>` : ''}
+
+      <div style="margin-top: 1.5rem; text-align: center;">
+        <button id="wizard-finish-btn" class="btn-primary" style="width: 100%;">Ver en Inventario</button>
+      </div>
     `;
+
+    // Botón para finalizar y ver el inventario
+    const finishBtn = document.getElementById('wizard-finish-btn');
+    if (finishBtn) {
+      finishBtn.addEventListener('click', () => {
+        // Redirigir al dashboard
+        document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelector('.nav-btn[data-view="dashboard"]').classList.add('active');
+        
+        document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
+        document.getElementById('view-dashboard').classList.add('active');
+        
+        // Recargar productos (si existe la función global)
+        if (typeof window.loadProducts === 'function') {
+          window.loadProducts();
+        } else {
+          // Fallback simple: recargar página
+          location.reload();
+        }
+      });
+    }
 
     restartBtn.classList.remove('hidden');
   }
