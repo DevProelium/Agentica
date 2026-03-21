@@ -76,10 +76,11 @@
 
         if (!res.ok) {
           if (res.status === 401) {
-            // Token expirado o no autorizado, no es un error de red
-            // Dejar que el mecanismo global de expiración maneje esto, o simplemente loguear
-            console.warn('[Dashboard] Sesión expirada o no autorizada (401)');
-            throw new Error(`HTTP ${res.status}`);
+            // Token expirado o no autorizado -> limpiar sesión y recargar para volver al login
+            console.warn('[Dashboard] Sesión expirada o no autorizada (401), eliminando token y recargando');
+            localStorage.removeItem('agentica_token');
+            window.location.reload();
+            return;
           }
            throw new Error(`HTTP ${res.status}`);
         }
